@@ -193,6 +193,9 @@ function parseSheet(
       orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes });
     }
     if (orders.length > 0) {
+      // DEBUG – logs every parsed order so we can see exactly what the parser
+      // is reading. Remove once the phantom-time issue is resolved.
+      console.warn(`[parseSheet] ${name} | ${dateStr} | col=${col} | ${orders.length} orders`, orders.map(o => ({ ord: o.orderNumber, lines: o.linesPicked, time: o.timeMinutes })));
       result[`${name}|${dateStr}`] = { pickerName: name, date, dateStr, orders };
     }
   }
