@@ -164,8 +164,10 @@ function parseSheet(
       const lines = typeof linesCell === 'number'
         ? Math.round(linesCell)
         : parseInt(String(linesCell ?? '0'), 10) || 0;
-      if (lines <= 0 && timeMinutes === null) continue;
-      orders.push({ orderNumber: String(orderCell).trim(), linesPicked: Math.max(0, lines), timeMinutes });
+      // A real pick must have at least 1 line. Rows with 0 lines are totals,
+      // blank spacers, or summary cells — including them creates phantom timestamps.
+      if (lines <= 0) continue;
+      orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes });
     }
     if (orders.length > 0) {
       result[`${name}|${dateStr}`] = { pickerName: name, date, dateStr, orders };
