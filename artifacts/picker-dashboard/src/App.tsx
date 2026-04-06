@@ -426,7 +426,7 @@ function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, background: '#0A0A0A' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ ...mono, color: AMBER, fontWeight: 700, fontSize: 17, letterSpacing: '0.06em' }}>PICKER·TRACK</span>
+        <span style={{ ...mono, color: AMBER, fontWeight: 700, fontSize: 17, letterSpacing: '0.06em' }}>PICK TRACK</span>
         <span style={{ background: BG3, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 8px', fontSize: 10, color: DIM, letterSpacing: '0.06em' }}>AUTOMOTIVE AFTERMARKET</span>
         {dateRange && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,166,35,0.08)', border: `1px solid rgba(245,166,35,0.25)`, borderRadius: 4, padding: '3px 10px' }}>
@@ -598,13 +598,12 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
       </div>
 
       <div style={{ ...section }}>
-        <div style={secTitle}>Leaderboard — Avg Lines / Hr (All Time)</div>
+        <div style={secTitle}>Team Snapshot — Avg Lines / Hr</div>
         <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
-          {leaderboard.map((p, idx) => (
+          {leaderboard.map((p) => (
             <div key={p.name} style={{ ...card, borderLeft: `3px solid ${p.color}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ ...mono, fontSize: 10, color: DIM }}>#{idx + 1}</span>
-                <span style={{ fontSize: 10, color: DIM }}>{p.daysWorked}d</span>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                <span style={{ fontSize: 10, color: DIM }}>{p.daysWorked}d logged</span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{p.name}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: AMBER, ...mono }}>{p.avgLph > 0 ? p.avgLph.toFixed(1) : '—'}</div>
@@ -639,7 +638,7 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
         <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
           <table style={tbl}>
             <thead><tr>
-              {['Date','Picker','Lines','Orders','L/Hr','Ord/Hr','Avg L/Ord','Window','Rating','Gaps'].map(h => <th key={h} style={th}>{h}</th>)}
+              {['Date','Picker','Lines','Orders','L/Hr','Ord/Hr','Avg L/Ord','Window','Gaps'].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {tableRows.map((s, i) => (
@@ -652,13 +651,6 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
                   <td style={{ ...td, ...mono }}>{s.ordersPerHour != null ? s.ordersPerHour.toFixed(1) : '—'}</td>
                   <td style={{ ...td, ...mono }}>{s.avgLinesPerOrder > 0 ? s.avgLinesPerOrder.toFixed(1) : '—'}</td>
                   <td style={{ ...td, ...mono, fontSize: 11 }}>{s.firstTime != null && s.lastTime != null ? `${fmtMin(s.firstTime)}–${fmtMin(s.lastTime)}` : '—'}</td>
-                  <td style={td}>
-                    {s.performanceRating && pill(
-                      s.performanceRating === 'green' ? '▲' : s.performanceRating === 'red' ? '▼' : '◆',
-                      s.performanceRating === 'green' ? GREEN : s.performanceRating === 'red' ? RED : YELLOW,
-                      s.performanceRating === 'red' ? '#fff' : '#000'
-                    )}
-                  </td>
                   <td style={td}>{s.gapFlags.length > 0 && <span style={{ color: RED, ...mono }}>{s.gapFlags.length}</span>}</td>
                 </tr>
               ))}
@@ -950,11 +942,52 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           <StatCard label="Avg Lines/Hr" value={avgLph > 0 ? avgLph.toFixed(1) : '—'} />
           <StatCard label="Lines/Order" value={avgLpo > 0 ? avgLpo.toFixed(1) : '—'} color={TEXT} />
           <StatCard label="Days Worked" value={days.length} color={TEXT} />
-          <StatCard label="vs Team Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
+          <StatCard label="vs Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
           <StatCard label="Trend" value={trendValue} sub={trendSub || undefined} color={trendColor} />
           <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor} />
         </div>
       </div>
+
+      {(() => {
+        const strengths: string[] = [];
+        const focus: string[] = [];
+        if (avgLph > 0 && teamAvgLph > 0) {
+          if (avgLph >= teamAvgLph * 1.05) strengths.push(`Above-average pick rate — ${avgLph.toFixed(1)} L/Hr vs team ${teamAvgLph.toFixed(1)}`);
+          else if (avgLph < teamAvgLph * 0.95) focus.push(`Pick rate below team average — ${avgLph.toFixed(1)} L/Hr vs team ${teamAvgLph.toFixed(1)}`);
+        }
+        if (consistencyValue === 'High') strengths.push(`Steady day-to-day output (${consistencySub})`);
+        else if (consistencyValue === 'Low') focus.push(`Variable output day to day (${consistencySub})`);
+        if (trendValue.startsWith('↑')) strengths.push(`Improving trend — ${trendValue.replace('↑ ', '')} ${trendSub}`);
+        else if (trendValue.startsWith('↓')) focus.push(`Declining trend — ${trendValue.replace('↓ ', '')} ${trendSub}`);
+        if (pickerGaps.length === 0 && days.length >= 3) strengths.push(`No gap flags across ${days.length} days`);
+        else if (pickerGaps.length > 0) focus.push(`${pickerGaps.length} gap flag${pickerGaps.length > 1 ? 's' : ''} recorded — check raw orders`);
+        if (avgLpo >= 3.0) strengths.push(`High lines per order (${avgLpo.toFixed(1)} L/Ord)`);
+        else if (avgLpo > 0 && avgLpo < 2.0) focus.push(`Low lines per order (${avgLpo.toFixed(1)}) — may indicate simpler order types`);
+        if (strengths.length === 0 && focus.length === 0) return null;
+        const col = (items: string[], color: string, label: string) => (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+            {items.length === 0
+              ? <div style={{ fontSize: 12, color: DIM }}>Nothing notable</div>
+              : items.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                  <span style={{ color, fontSize: 13, lineHeight: 1, marginTop: 1 }}>{label === 'Strengths' ? '✓' : '·'}</span>
+                  <span style={{ fontSize: 12, color: TEXT, lineHeight: 1.5 }}>{s}</span>
+                </div>
+              ))
+            }
+          </div>
+        );
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Strengths &amp; Focus Areas</div>
+            <div style={{ ...card, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+              {col(strengths, GREEN, 'Strengths')}
+              {col(focus, YELLOW, 'Focus Areas')}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
         <div style={{ ...card, padding: '14px 0 8px 0' }}>
@@ -988,7 +1021,7 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
           <table style={tbl}>
             <thead><tr>
-              {['Date','Lines','Orders','L/Hr','Ord/Hr','Avg L/Ord','Active Window','Rating','Gaps'].map(h => <th key={h} style={th}>{h}</th>)}
+              {['Date','Lines','Orders','L/Hr','Ord/Hr','Avg L/Ord','Active Window','Gaps'].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {sortedDays.map((s, i) => (
@@ -1002,13 +1035,6 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
                   <td style={{ ...td, ...mono, fontSize: 11 }}>
                     {s.firstTime != null && s.lastTime != null
                       ? `${fmtMin(s.firstTime)}–${fmtMin(s.lastTime)} (${s.activeWindowMinutes}m)` : '—'}
-                  </td>
-                  <td style={td}>
-                    {s.performanceRating && pill(
-                      s.performanceRating.toUpperCase(),
-                      s.performanceRating === 'green' ? GREEN : s.performanceRating === 'red' ? RED : YELLOW,
-                      s.performanceRating === 'red' ? '#fff' : '#000'
-                    )}
                   </td>
                   <td style={td}>
                     {s.gapFlags.length > 0 && (
