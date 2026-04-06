@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Warehouse Picker Efficiency Tracker API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: pickers
+    description: Picker management
+  - name: picks
+    description: Pick log management
+  - name: analytics
+    description: Efficiency analytics
 paths:
   /healthz:
     get:
@@ -24,6 +30,311 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /pickers:
+    get:
+      operationId: listPickers
+      tags: [pickers]
+      summary: List all pickers
+      responses:
+        "200":
+          description: List of pickers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Picker"
+    post:
+      operationId: createPicker
+      tags: [pickers]
+      summary: Create a new picker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePickerBody"
+      responses:
+        "201":
+          description: Created picker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Picker"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /pickers/{id}:
+    get:
+      operationId: getPicker
+      tags: [pickers]
+      summary: Get a picker by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Picker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Picker"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updatePicker
+      tags: [pickers]
+      summary: Update a picker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePickerBody"
+      responses:
+        "200":
+          description: Updated picker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Picker"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePicker
+      tags: [pickers]
+      summary: Delete a picker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /picks:
+    get:
+      operationId: listPicks
+      tags: [picks]
+      summary: List pick logs
+      parameters:
+        - name: pickerId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of picks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pick"
+    post:
+      operationId: createPick
+      tags: [picks]
+      summary: Log a pick
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePickBody"
+      responses:
+        "201":
+          description: Created pick
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pick"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /picks/{id}:
+    get:
+      operationId: getPick
+      tags: [picks]
+      summary: Get a pick by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Pick
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pick"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePick
+      tags: [picks]
+      summary: Delete a pick log entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /analytics/leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [analytics]
+      summary: Get efficiency leaderboard
+      parameters:
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Get overall analytics summary
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /analytics/picker/{id}/stats:
+    get:
+      operationId: getPickerStats
+      tags: [analytics]
+      summary: Get detailed stats for a specific picker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Picker stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PickerStats"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /analytics/daily-trend:
+    get:
+      operationId: getDailyTrend
+      tags: [analytics]
+      summary: Get daily picks trend across all pickers
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Daily trend data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyTrend"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +345,223 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Picker:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        employeeId:
+          type: string
+        zone:
+          type: ["string", "null"]
+        active:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - employeeId
+        - active
+        - createdAt
+        - updatedAt
+
+    CreatePickerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        employeeId:
+          type: string
+        zone:
+          type: ["string", "null"]
+        active:
+          type: boolean
+      required:
+        - name
+        - employeeId
+
+    UpdatePickerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        employeeId:
+          type: string
+        zone:
+          type: ["string", "null"]
+        active:
+          type: boolean
+
+    Pick:
+      type: object
+      properties:
+        id:
+          type: integer
+        pickerId:
+          type: integer
+        pickerName:
+          type: ["string", "null"]
+        itemSku:
+          type: string
+        quantity:
+          type: integer
+        zone:
+          type: ["string", "null"]
+        pickedAt:
+          type: string
+        durationSeconds:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - pickerId
+        - itemSku
+        - quantity
+        - pickedAt
+        - createdAt
+
+    CreatePickBody:
+      type: object
+      properties:
+        pickerId:
+          type: integer
+        itemSku:
+          type: string
+        quantity:
+          type: integer
+        zone:
+          type: ["string", "null"]
+        pickedAt:
+          type: string
+        durationSeconds:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - pickerId
+        - itemSku
+        - quantity
+        - pickedAt
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        pickerId:
+          type: integer
+        pickerName:
+          type: string
+        employeeId:
+          type: string
+        totalPicks:
+          type: integer
+        totalItems:
+          type: integer
+        avgDurationSeconds:
+          type: ["number", "null"]
+        efficiencyScore:
+          type: number
+        rank:
+          type: integer
+      required:
+        - pickerId
+        - pickerName
+        - employeeId
+        - totalPicks
+        - totalItems
+        - efficiencyScore
+        - rank
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        totalPickers:
+          type: integer
+        activePickers:
+          type: integer
+        totalPicksToday:
+          type: integer
+        totalPicksThisWeek:
+          type: integer
+        totalPicksAllTime:
+          type: integer
+        avgPicksPerPickerToday:
+          type: number
+        topPickerToday:
+          type: ["string", "null"]
+        topPickerTodayCount:
+          type: ["integer", "null"]
+      required:
+        - totalPickers
+        - activePickers
+        - totalPicksToday
+        - totalPicksThisWeek
+        - totalPicksAllTime
+        - avgPicksPerPickerToday
+
+    PickerStats:
+      type: object
+      properties:
+        pickerId:
+          type: integer
+        pickerName:
+          type: string
+        employeeId:
+          type: string
+        zone:
+          type: ["string", "null"]
+        totalPicks:
+          type: integer
+        totalItems:
+          type: integer
+        avgDurationSeconds:
+          type: ["number", "null"]
+        efficiencyScore:
+          type: number
+        picksPerDay:
+          type: number
+        recentPicks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Pick"
+      required:
+        - pickerId
+        - pickerName
+        - employeeId
+        - totalPicks
+        - totalItems
+        - efficiencyScore
+        - picksPerDay
+        - recentPicks
+
+    DailyTrend:
+      type: object
+      properties:
+        date:
+          type: string
+        totalPicks:
+          type: integer
+        totalItems:
+          type: integer
+        activePickers:
+          type: integer
+      required:
+        - date
+        - totalPicks
+        - totalItems
+        - activePickers

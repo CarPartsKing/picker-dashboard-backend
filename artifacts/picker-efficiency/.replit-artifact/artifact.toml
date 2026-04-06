@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Warehouse Picker Efficiency"
+version = "1.0.0"
+id = "artifacts/picker-efficiency"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19134
+
+[services.development]
+run = "pnpm --filter @workspace/picker-efficiency run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/picker-efficiency", "run", "build" ]
+publicDir = "artifacts/picker-efficiency/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19134"
+BASE_PATH = "/"
