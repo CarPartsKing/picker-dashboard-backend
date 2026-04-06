@@ -672,6 +672,27 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
   }
   const weeks = [...weekMap.keys()].sort();
 
+  // ── Day of week patterns ────────────────────────────────────────────────────
+  const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon … Sat, Sun last
+  const dowMap = new Map<number, DayStats[]>();
+  for (const s of allStats) {
+    const dow = new Date(s.dateStr + 'T12:00:00').getDay();
+    if (!dowMap.has(dow)) dowMap.set(dow, []);
+    dowMap.get(dow)!.push(s);
+  }
+  const dowData = DOW_ORDER.filter(d => dowMap.has(d)).map(d => {
+    const items = dowMap.get(d)!;
+    const lphItems = items.filter(x => x.linesPerHour != null);
+    const avgLph = lphItems.length ? lphItems.reduce((s, x) => s + x.linesPerHour!, 0) / lphItems.length : 0;
+    const totalLinesSum = items.reduce((s, x) => s + x.totalLines, 0);
+    const uniqueDates = new Set(items.map(x => x.dateStr)).size;
+    const avgTeamLines = uniqueDates > 0 ? Math.round(totalLinesSum / uniqueDates) : 0;
+    return { day: DOW_NAMES[d], avgLph: +avgLph.toFixed(2), avgTeamLines, uniqueDates };
+  });
+  const dowMin = dowData.length ? dowData.reduce((a, b) => b.avgLph > 0 && (a.avgLph === 0 || b.avgLph < a.avgLph) ? b : a) : null;
+  const dowMax = dowData.length ? dowData.reduce((a, b) => b.avgLph > a.avgLph ? b : a) : null;
+
   const chartData = weeks.map(wk => {
     const ws = weekMap.get(wk)!;
     return { week: weekLabel(wk), lines: ws.reduce((s, d) => s + d.totalLines, 0), orders: ws.reduce((s, d) => s + d.totalOrders, 0) };
@@ -705,6 +726,78 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
           </ResponsiveContainer>
         </div>
       </div>
+
+      {dowData.length > 0 && (
+        <div style={{ ...section }}>
+          <div style={secTitle}>Day of Week Patterns</div>
+          <div style={{ fontSize: 12, color: DIM, marginBottom: 12 }}>
+            Average team L/Hr and lines by day of week — steady differences may point to staffing or volume patterns.
+          </div>
+
+          {/* callout pills */}
+          {dowMin && dowMax && dowMin.day !== dowMax.day && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+              <div style={{ background: 'rgba(245,166,35,0.08)', border: `1px solid rgba(245,166,35,0.25)`, borderRadius: 6, padding: '8px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Highest</span>
+                <span style={{ ...mono, color: GREEN, fontWeight: 700, fontSize: 14 }}>{dowMax.day}</span>
+                <span style={{ ...mono, color: TEXT, fontSize: 13 }}>{dowMax.avgLph.toFixed(1)} L/Hr</span>
+                <span style={{ fontSize: 11, color: DIM }}>· {dowMax.avgTeamLines.toLocaleString()} avg lines</span>
+              </div>
+              <div style={{ background: 'rgba(245,166,35,0.05)', border: `1px solid ${BORDER}`, borderRadius: 6, padding: '8px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Lowest</span>
+                <span style={{ ...mono, color: YELLOW, fontWeight: 700, fontSize: 14 }}>{dowMin.day}</span>
+                <span style={{ ...mono, color: TEXT, fontSize: 13 }}>{dowMin.avgLph.toFixed(1)} L/Hr</span>
+                <span style={{ fontSize: 11, color: DIM }}>· {dowMin.avgTeamLines.toLocaleString()} avg lines</span>
+              </div>
+              {dowMax.avgLph > 0 && dowMin.avgLph > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', fontSize: 12, color: DIM }}>
+                  Gap: <span style={{ ...mono, color: AMBER, marginLeft: 6 }}>{((dowMax.avgLph - dowMin.avgLph) / dowMin.avgLph * 100).toFixed(0)}% difference</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* chart */}
+          <div style={{ ...card, padding: '16px 0 8px 0' }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={dowData} margin={{ left: 10, right: 20, top: 4, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis dataKey="day" tick={{ fill: DIM, fontSize: 11 }} />
+                <YAxis tick={{ fill: DIM, fontSize: 10 }} />
+                <Tooltip content={<DarkTip />} />
+                {/* Two bars per day: avg L/Hr (amber) and avg team lines scaled */}
+                <Bar dataKey="avgLph" name="Avg L/Hr" radius={[3, 3, 0, 0]}
+                  fill={AMBER}
+                  label={{ position: 'top', fill: DIM, fontSize: 9, formatter: (v: number) => v > 0 ? v.toFixed(1) : '' }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* detail table */}
+          <div style={{ ...card, padding: 0, overflowX: 'auto', marginTop: 12 }}>
+            <table style={tbl}>
+              <thead><tr>
+                {['Day', 'Avg L/Hr', 'Avg Team Lines', 'Days Logged'].map(h => <th key={h} style={th}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {[...dowData].sort((a, b) => b.avgLph - a.avgLph).map((row, i) => {
+                  const isMax = dowMax?.day === row.day;
+                  const isMin = dowMin?.day === row.day && dowMin.day !== dowMax?.day;
+                  return (
+                    <tr key={row.day} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                      <td style={{ ...td, fontWeight: 700 }}>{row.day}</td>
+                      <td style={{ ...td, ...mono, color: isMax ? GREEN : isMin ? YELLOW : TEXT }}>{row.avgLph > 0 ? row.avgLph.toFixed(1) : '—'}</td>
+                      <td style={{ ...td, ...mono }}>{row.avgTeamLines > 0 ? row.avgTeamLines.toLocaleString() : '—'}</td>
+                      <td style={{ ...td, ...mono, color: DIM }}>{row.uniqueDates}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div style={{ ...section }}>
         <div style={secTitle}>Per-Picker Weekly Rollup</div>
