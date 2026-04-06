@@ -234,7 +234,7 @@ function weekLabel(ws: string): string {
  */
 function removePhantomTimes(times: number[]): number[] {
   if (times.length <= 1) return times;
-  const PHANTOM_CUTOFF = 150; // 2:30 AM — before this is suspicious
+  const PHANTOM_CUTOFF = 240; // 4:00 AM — before this is suspicious
   const earlyTimes = times.filter(t => t < PHANTOM_CUTOFF);
   const mainTimes  = times.filter(t => t >= PHANTOM_CUTOFF);
   // Only strip early-morning times when there is ALSO a main-shift cluster.
