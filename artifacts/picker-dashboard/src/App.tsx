@@ -286,14 +286,31 @@ const DarkTip = ({ active, payload, label }: { active?: boolean; payload?: { col
 };
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ lastUpdated, onClear, onToggleHistory, hasData }: {
+function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
   lastUpdated: Date | null; onClear: () => void; onToggleHistory: () => void; hasData: boolean;
+  dateRange: { first: string; last: string; days: number } | null;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, background: '#0A0A0A' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ ...mono, color: AMBER, fontWeight: 700, fontSize: 17, letterSpacing: '0.06em' }}>PICKER·TRACK</span>
         <span style={{ background: BG3, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 8px', fontSize: 10, color: DIM, letterSpacing: '0.06em' }}>AUTOMOTIVE AFTERMARKET</span>
+        {dateRange && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,166,35,0.08)', border: `1px solid rgba(245,166,35,0.25)`, borderRadius: 4, padding: '3px 10px' }}>
+            <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Data</span>
+            <span style={{ ...mono, fontSize: 12, color: AMBER }}>
+              {fmtDate(dateRange.first)}
+            </span>
+            {dateRange.first !== dateRange.last && (
+              <>
+                <span style={{ color: DIM, fontSize: 10 }}>→</span>
+                <span style={{ ...mono, fontSize: 12, color: AMBER }}>{fmtDate(dateRange.last)}</span>
+              </>
+            )}
+            <span style={{ fontSize: 10, color: DIM }}>·</span>
+            <span style={{ ...mono, fontSize: 11, color: DIM }}>{dateRange.days}d</span>
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {lastUpdated && <span style={{ fontSize: 11, color: DIM, ...mono }}>Updated {lastUpdated.toLocaleString()}</span>}
@@ -970,9 +987,13 @@ export default function App() {
 
   const hasData = allStats.length > 0;
 
+  const dateRange = allDates.length > 0
+    ? { first: allDates[0], last: allDates[allDates.length - 1], days: allDates.length }
+    : null;
+
   return (
     <div style={{ background: BG, minHeight: '100vh', fontFamily: "'DM Sans', 'Inter', ui-sans-serif, sans-serif", color: TEXT, fontSize: 13 }}>
-      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} hasData={hasData} />
+      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} hasData={hasData} dateRange={dateRange} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
       {!hasData ? (
