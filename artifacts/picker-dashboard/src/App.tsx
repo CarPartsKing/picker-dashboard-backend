@@ -139,18 +139,38 @@ function parseSheet(
   const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true }) as unknown[][];
   if (!raw || raw.length < 2) return {};
   const headerRow = (raw[0] as unknown[]) || [];
+  // Scan every column — do NOT stride by 3. If the sheet has any extra/separator
+  // column the stride assumption breaks and every subsequent picker reads from
+  // the wrong columns, producing phantom timestamps.
+  const COL_HEADER_RE = /^(lines?|times?|orders?|qty|quantity|picks?|date|total|#)$/i;
   const pickers: { name: string; col: number }[] = [];
-  for (let col = 0; col < headerRow.length; col += 3) {
+  for (let col = 0; col < headerRow.length; col++) {
     const cell = headerRow[col];
     if (typeof cell !== 'string') continue;
     const name = cell.trim();
     if (!name) continue;
+    if (COL_HEADER_RE.test(name)) continue; // skip column-header words, not picker names
+    if (SKIP_RE.test(name)) continue;
     pickers.push({ name, col });
   }
+  // Remove duplicates that arise when consecutive columns all look like picker
+  // names (shouldn't happen in a well-formed sheet, but guard anyway).
+  const seenCols = new Set<number>();
+  const dedupedPickers = pickers.filter(p => {
+    if (seenCols.has(p.col)) return false;
+    seenCols.add(p.col);
+    return true;
+  });
+  // Get row visibility metadata so we can skip hidden rows (common source of
+  // phantom data the user never sees when scrolling through Excel).
+  const rowMeta = (sheet['!rows'] as Array<{ hidden?: boolean } | undefined> | undefined) ?? [];
   const result: Record<string, Omit<PickerDayData, 'loadedAt'>> = {};
-  for (const { name, col } of pickers) {
+  for (const { name, col } of dedupedPickers) {
     const orders: Order[] = [];
     for (let row = 1; row < raw.length; row++) {
+      // Skip rows hidden in Excel — they are invisible to the user but the
+      // xlsx library includes them, which creates phantom data points.
+      if (rowMeta[row]?.hidden) continue;
       const r = (raw[row] as unknown[]) || [];
       const orderCell = r[col];
       const linesCell = r[col + 1];
@@ -160,6 +180,9 @@ function parseSheet(
         const t = orderCell.trim();
         if (!t || SKIP_RE.test(t)) continue;
       }
+      // Also skip numeric order cells that are 0 or negative (blank-cell
+      // default values Excel sometimes writes into "empty" cells).
+      if (typeof orderCell === 'number' && orderCell <= 0) continue;
       const timeMinutes = parseTime(timeCell);
       const lines = typeof linesCell === 'number'
         ? Math.round(linesCell)
