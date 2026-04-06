@@ -315,6 +315,94 @@ function selEl(value: string, onChange: (v: string) => void, options: string[]):
   );
 }
 
+// ─── RAW ORDERS EXPAND PANEL ──────────────────────────────────────────────────
+const PHANTOM_CUTOFF_DISPLAY = 240;
+
+function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
+  orders: Order[];
+  gapFrom?: number;
+  gapTo?: number;
+  colSpan: number;
+}) {
+  const allTimes = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
+  const hasMain = allTimes.some(t => t >= PHANTOM_CUTOFF_DISPLAY);
+
+  const sorted = [...orders].sort((a, b) => {
+    if (a.timeMinutes === null && b.timeMinutes === null) return 0;
+    if (a.timeMinutes === null) return 1;
+    if (b.timeMinutes === null) return -1;
+    return a.timeMinutes - b.timeMinutes;
+  });
+
+  const totalLines = orders.reduce((s, o) => s + o.linesPicked, 0);
+  const timestamped = allTimes.length;
+
+  // Build row list, inserting a gap divider between fromMinutes and toMinutes
+  type RowItem = { kind: 'order'; order: Order; idx: number } | { kind: 'divider' };
+  const rows: RowItem[] = [];
+  let dividerDone = false;
+  sorted.forEach((order, idx) => {
+    if (!dividerDone && gapFrom !== undefined && gapTo !== undefined
+        && order.timeMinutes !== null && order.timeMinutes >= gapTo) {
+      rows.push({ kind: 'divider' });
+      dividerDone = true;
+    }
+    rows.push({ kind: 'order', order, idx });
+  });
+
+  return (
+    <tr>
+      <td colSpan={colSpan} style={{ padding: 0, background: '#111', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ padding: '14px 22px 16px' }}>
+          <div style={{ fontSize: 10, color: DIM, marginBottom: 10, letterSpacing: '0.09em', textTransform: 'uppercase' }}>
+            Raw parsed orders — {orders.length} total · {timestamped} timestamped · {totalLines} lines picked
+          </div>
+          <div style={{ maxHeight: 300, overflowY: 'auto', borderRadius: 4, border: `1px solid ${BORDER}` }}>
+            <table style={{ ...tbl, fontSize: 11 }}>
+              <thead>
+                <tr>
+                  {['Order #', 'Lines', 'Parsed Time', 'Note'].map(h => (
+                    <th key={h} style={{ ...th, fontSize: 10, position: 'sticky', top: 0, background: BG3 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => {
+                  if (row.kind === 'divider') {
+                    const gapLen = gapTo! - gapFrom!;
+                    return (
+                      <tr key={`div-${i}`}>
+                        <td colSpan={4} style={{ padding: '5px 12px', fontSize: 10, color: RED, fontStyle: 'italic', borderTop: `1px dashed rgba(239,68,68,0.4)`, borderBottom: `1px dashed rgba(239,68,68,0.4)`, background: 'rgba(239,68,68,0.06)', textAlign: 'center', ...mono }}>
+                          ↑ last pick before gap · {gapLen}m gap · first pick after gap ↓
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const { order } = row;
+                  const isPhantom = order.timeMinutes !== null && hasMain && order.timeMinutes < PHANTOM_CUTOFF_DISPLAY;
+                  const isBoundary = order.timeMinutes === gapFrom || order.timeMinutes === gapTo;
+                  return (
+                    <tr key={`ord-${i}`} style={{ background: isBoundary ? 'rgba(245,166,35,0.07)' : 'transparent' }}>
+                      <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? DIM : TEXT }}>{order.orderNumber}</td>
+                      <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? DIM : TEXT }}>{order.linesPicked}</td>
+                      <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? '#7f4444' : isBoundary ? AMBER : order.timeMinutes !== null ? TEXT : DIM }}>
+                        {order.timeMinutes !== null ? fmtMin(order.timeMinutes) : '—'}
+                      </td>
+                      <td style={{ ...td, fontSize: 10, color: DIM, fontStyle: 'italic' }}>
+                        {isPhantom ? 'filtered — phantom timestamp' : isBoundary && order.timeMinutes === gapFrom ? 'gap starts here' : isBoundary && order.timeMinutes === gapTo ? 'gap ends here' : ''}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ─── RECHARTS TOOLTIP ─────────────────────────────────────────────────────────
 const DarkTip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
@@ -781,10 +869,12 @@ function CompareTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerNam
 }
 
 // ─── PICKER DETAIL TAB ────────────────────────────────────────────────────────
-function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker }: {
+function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pickerData }: {
   allStats: DayStats[]; pickerNames: string[]; allDates: string[]; externalPicker?: string;
+  pickerData: Record<string, PickerDayData>;
 }) {
   const [sel, setSel] = useState(externalPicker || pickerNames[0] || '');
+  const [expandedGapKey, setExpandedGapKey] = useState<string | null>(null);
   useEffect(() => {
     if (externalPicker && pickerNames.includes(externalPicker)) setSel(externalPicker);
     else if (pickerNames.length > 0 && !pickerNames.includes(sel)) setSel(pickerNames[0]);
@@ -896,21 +986,38 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker }: {
       {pickerGaps.length > 0 && (
         <div style={{ ...section }}>
           <div style={secTitle}>Gap Flags</div>
+          <div style={{ fontSize: 10, color: DIM, marginBottom: 8, letterSpacing: '0.07em' }}>
+            Click any row to inspect raw parsed orders for that day
+          </div>
           <div style={{ ...card, padding: 0 }}>
             <table style={tbl}>
               <thead><tr>
-                {['Severity','Date','From','To','Gap'].map(h => <th key={h} style={th}>{h}</th>)}
+                {['Severity','Date','From','To','Gap',''].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {pickerGaps.map((g, i) => (
-                  <tr key={i}>
-                    <td style={td}>{pill(g.severity.toUpperCase(), g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : BG3, g.severity === 'High' ? '#fff' : g.severity === 'Med' ? '#000' : DIM)}</td>
-                    <td style={{ ...td, ...mono, fontSize: 11 }}>{fmtDate(g.dateStr)}</td>
-                    <td style={{ ...td, ...mono }}>{fmtMin(g.fromMinutes)}</td>
-                    <td style={{ ...td, ...mono }}>{fmtMin(g.toMinutes)}</td>
-                    <td style={{ ...td, ...mono, color: g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : DIM }}>{g.gapMinutes}m</td>
-                  </tr>
-                ))}
+                {pickerGaps.map((g, i) => {
+                  const rowKey = `${g.pickerName}|${g.dateStr}|${g.fromMinutes}|${g.toMinutes}`;
+                  const isExpanded = expandedGapKey === rowKey;
+                  const orders = pickerData[`${g.pickerName}|${g.dateStr}`]?.orders;
+                  return (
+                    <React.Fragment key={i}>
+                      <tr
+                        onClick={() => setExpandedGapKey(isExpanded ? null : rowKey)}
+                        style={{ background: isExpanded ? 'rgba(245,166,35,0.06)' : 'transparent', cursor: 'pointer' }}
+                      >
+                        <td style={td}>{pill(g.severity.toUpperCase(), g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : BG3, g.severity === 'High' ? '#fff' : g.severity === 'Med' ? '#000' : DIM)}</td>
+                        <td style={{ ...td, ...mono, fontSize: 11 }}>{fmtDate(g.dateStr)}</td>
+                        <td style={{ ...td, ...mono }}>{fmtMin(g.fromMinutes)}</td>
+                        <td style={{ ...td, ...mono }}>{fmtMin(g.toMinutes)}</td>
+                        <td style={{ ...td, ...mono, color: g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : DIM }}>{g.gapMinutes}m</td>
+                        <td style={{ ...td, color: DIM, fontSize: 14 }}>{isExpanded ? '▲' : '▼'}</td>
+                      </tr>
+                      {isExpanded && orders && (
+                        <RawOrdersExpand orders={orders} gapFrom={g.fromMinutes} gapTo={g.toMinutes} colSpan={6} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -921,9 +1028,11 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker }: {
 }
 
 // ─── GAP FLAGS TAB ────────────────────────────────────────────────────────────
-function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump }: {
+function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump, pickerData }: {
   allGapFlags: GapFlag[]; setActiveTab: (t: string) => void; onPickerJump: (p: string) => void;
+  pickerData: Record<string, PickerDayData>;
 }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const sorted = [...allGapFlags].sort((a, b) => b.gapMinutes - a.gapMinutes);
   if (!sorted.length) {
     return (
@@ -945,25 +1054,45 @@ function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump }: {
         <StatCard label="Med 90–119m" value={med} color={med > 0 ? YELLOW : DIM} />
         <StatCard label="Low 60–89m" value={low} color={DIM} />
       </div>
+      <div style={{ fontSize: 10, color: DIM, marginBottom: 10, letterSpacing: '0.07em' }}>
+        Click any row to inspect raw parsed orders for that picker · day
+      </div>
       <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
         <table style={tbl}>
           <thead><tr>
             {['Severity','Picker','Date','From','To','Gap',''].map((h, i) => <th key={i} style={th}>{h}</th>)}
           </tr></thead>
           <tbody>
-            {sorted.map((g, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
-                <td style={td}>{pill(g.severity.toUpperCase(), g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : BG3, g.severity === 'High' ? '#fff' : g.severity === 'Med' ? '#000' : DIM)}</td>
-                <td style={td}>{g.pickerName}</td>
-                <td style={{ ...td, ...mono, fontSize: 11 }}>{fmtDate(g.dateStr)}</td>
-                <td style={{ ...td, ...mono }}>{fmtMin(g.fromMinutes)}</td>
-                <td style={{ ...td, ...mono }}>{fmtMin(g.toMinutes)}</td>
-                <td style={{ ...td, ...mono, color: g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : DIM }}>{g.gapMinutes}m</td>
-                <td style={td}>
-                  {btn('View →', () => { onPickerJump(g.pickerName); setActiveTab('picker-detail'); }, { padding: '3px 8px', fontSize: 10 })}
-                </td>
-              </tr>
-            ))}
+            {sorted.map((g, i) => {
+              const rowKey = `${g.pickerName}|${g.dateStr}|${g.fromMinutes}|${g.toMinutes}`;
+              const isExpanded = expandedKey === rowKey;
+              const pdKey = `${g.pickerName}|${g.dateStr}`;
+              const orders = pickerData[pdKey]?.orders;
+              return (
+                <React.Fragment key={i}>
+                  <tr
+                    onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
+                    style={{ background: isExpanded ? 'rgba(245,166,35,0.06)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)', cursor: 'pointer' }}
+                  >
+                    <td style={td}>{pill(g.severity.toUpperCase(), g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : BG3, g.severity === 'High' ? '#fff' : g.severity === 'Med' ? '#000' : DIM)}</td>
+                    <td style={{ ...td, fontWeight: 600 }}>{g.pickerName}</td>
+                    <td style={{ ...td, ...mono, fontSize: 11 }}>{fmtDate(g.dateStr)}</td>
+                    <td style={{ ...td, ...mono }}>{fmtMin(g.fromMinutes)}</td>
+                    <td style={{ ...td, ...mono }}>{fmtMin(g.toMinutes)}</td>
+                    <td style={{ ...td, ...mono, color: g.severity === 'High' ? RED : g.severity === 'Med' ? YELLOW : DIM }}>{g.gapMinutes}m</td>
+                    <td style={{ ...td, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: DIM, fontSize: 14, lineHeight: 1 }}>{isExpanded ? '▲' : '▼'}</span>
+                      <span onClick={e => e.stopPropagation()}>
+                        {btn('View →', () => { onPickerJump(g.pickerName); setActiveTab('picker-detail'); }, { padding: '3px 8px', fontSize: 10 })}
+                      </span>
+                    </td>
+                  </tr>
+                  {isExpanded && orders && (
+                    <RawOrdersExpand orders={orders} gapFrom={g.fromMinutes} gapTo={g.toMinutes} colSpan={7} />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1051,8 +1180,8 @@ export default function App() {
           {activeTab === 'overview' && <OverviewTab allStats={allStats} allDates={allDates} pickerNames={pickerNames} allGapFlags={allGapFlags} />}
           {activeTab === 'weekly' && <WeeklyTab allStats={allStats} pickerNames={pickerNames} />}
           {activeTab === 'compare' && <CompareTab allStats={allStats} pickerNames={pickerNames} />}
-          {activeTab === 'picker-detail' && <PickerDetailTab allStats={allStats} pickerNames={pickerNames} allDates={allDates} externalPicker={jumpPicker} />}
-          {activeTab === 'gap-flags' && <GapFlagsTab allGapFlags={allGapFlags} setActiveTab={setActiveTab} onPickerJump={setJumpPicker} />}
+          {activeTab === 'picker-detail' && <PickerDetailTab allStats={allStats} pickerNames={pickerNames} allDates={allDates} externalPicker={jumpPicker} pickerData={pickerData} />}
+          {activeTab === 'gap-flags' && <GapFlagsTab allGapFlags={allGapFlags} setActiveTab={setActiveTab} onPickerJump={setJumpPicker} pickerData={pickerData} />}
         </>
       )}
     </div>
