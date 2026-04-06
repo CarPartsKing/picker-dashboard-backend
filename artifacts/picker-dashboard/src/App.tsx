@@ -890,6 +890,43 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   const teamAvgLph = teamLphs.length ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
   const vsTeam = teamAvgLph > 0 ? ((avgLph - teamAvgLph) / teamAvgLph) * 100 : 0;
 
+  // ── Trend direction: last 5 days vs prior 5 days (by L/Hr) ──────────────────
+  const lphSorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+  const last5  = lphSorted.slice(-5);
+  const prior5 = lphSorted.slice(-10, -5);
+  const last5Avg  = last5.length  ? last5.reduce((s, d)  => s + d.linesPerHour!, 0) / last5.length  : 0;
+  const prior5Avg = prior5.length ? prior5.reduce((s, d) => s + d.linesPerHour!, 0) / prior5.length : 0;
+  let trendValue = '—', trendSub = '', trendColor = DIM;
+  if (last5.length >= 2 && prior5.length >= 1) {
+    const pct = prior5Avg > 0 ? ((last5Avg - prior5Avg) / prior5Avg) * 100 : 0;
+    trendSub = 'vs prior 5 days';
+    if (pct > 5)       { trendValue = `↑ +${pct.toFixed(0)}%`; trendColor = GREEN; }
+    else if (pct < -5) { trendValue = `↓ ${pct.toFixed(0)}%`;  trendColor = RED;   }
+    else               { trendValue = '→ flat';                 trendColor = YELLOW; }
+  } else if (last5.length >= 3) {
+    // fewer than 10 total days — split what we have in half
+    const half = Math.floor(last5.length / 2);
+    const earlyAvg = last5.slice(0, half).reduce((s, d) => s + d.linesPerHour!, 0) / half;
+    const lateAvg  = last5.slice(half).reduce((s, d) => s + d.linesPerHour!, 0) / (last5.length - half);
+    const pct = earlyAvg > 0 ? ((lateAvg - earlyAvg) / earlyAvg) * 100 : 0;
+    trendSub = 'recent vs early';
+    if (pct > 5)       { trendValue = `↑ +${pct.toFixed(0)}%`; trendColor = GREEN; }
+    else if (pct < -5) { trendValue = `↓ ${pct.toFixed(0)}%`;  trendColor = RED;   }
+    else               { trendValue = '→ flat';                 trendColor = YELLOW; }
+  }
+
+  // ── Consistency score: coefficient of variation of daily L/Hr ───────────────
+  let consistencyValue = '—', consistencySub = '', consistencyColor = DIM;
+  if (lphDays.length >= 2) {
+    const mean = avgLph;
+    const variance = lphDays.reduce((s, d) => s + Math.pow(d.linesPerHour! - mean, 2), 0) / lphDays.length;
+    const cv = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : 0;
+    consistencySub = `CV ${cv.toFixed(0)}% · ${lphDays.length}d`;
+    if      (cv < 15) { consistencyValue = 'High'; consistencyColor = GREEN;  }
+    else if (cv < 30) { consistencyValue = 'Med';  consistencyColor = YELLOW; }
+    else              { consistencyValue = 'Low';  consistencyColor = RED;    }
+  }
+
   const trendData = allDates.map(d => ({
     date: fmtDate(d),
     lines: days.find(s => s.dateStr === d)?.totalLines ?? null,
@@ -914,6 +951,8 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           <StatCard label="Lines/Order" value={avgLpo > 0 ? avgLpo.toFixed(1) : '—'} color={TEXT} />
           <StatCard label="Days Worked" value={days.length} color={TEXT} />
           <StatCard label="vs Team Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
+          <StatCard label="Trend" value={trendValue} sub={trendSub || undefined} color={trendColor} />
+          <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor} />
         </div>
       </div>
 
