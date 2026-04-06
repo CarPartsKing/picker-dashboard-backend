@@ -1,0 +1,36 @@
+What this is:
+A performance tracking dashboard for warehouse order pickers at an automotive aftermarket parts distribution company. Pickers pull internet orders (mostly RockAuto) and manually log their work into a Google Sheet each day.
+How the data is structured:
+The data comes from an Excel/Google Sheets file. Each date has its own tab named like 412026 (April 1 2026), 422026 (April 2), 4102026 (April 10), etc. The format is wide — each picker occupies 3 columns repeating across the sheet: Order Number, Lines Picked, Time Logged. Row 1 contains picker names at every 3rd column starting at column 0. Rows 2 onwards are individual orders. Times are manually entered and messy — they can be integers like 759 (meaning 7:59am), 1202 (meaning 12:02pm), strings like 6;23 (semicolon instead of colon), or Excel time fractions.
+How the app works:
+User drags and drops the Excel file into the app. The app reads all date tabs automatically, parses each picker's data, and populates the dashboard. Multiple files can be loaded throughout the week and duplicate picker+date combinations should be replaced not stacked. Show a last updated timestamp and file history.
+KPIs to track:
+
+Total lines picked per day and per week
+Total orders per day and per week
+Lines per hour (primary metric — calculated from first to last timestamp of the day as active window)
+Orders per hour (secondary metric)
+Average lines per order (order complexity indicator)
+Gap flags — any stretch between consecutive timestamps over 60 minutes flagged as a warning
+Performance rating per picker relative to team average that day — green above 15 percent, yellow within 15 percent, red below 15 percent
+
+Dashboard tabs:
+
+Overview — team summary stats, leaderboard cards ranked by lines per hour, daily lines bar chart broken out by picker, full daily breakdown table with all KPIs
+Weekly — total lines per week bar chart, weekly rollup table per picker with lines per day and avg lines per hour
+Compare — pick any two pickers side by side, radar chart across 4 dimensions, stat by stat comparison with winner highlighted green, shared day trend line
+Picker Detail — select any picker, see their full summary stats, daily trend chart, day by day breakdown table including active window, vs team comparison, and inline gap flags
+Gap Flags — all timestamp gaps over 60 minutes across all pickers sorted by duration, severity tiered as Low 60 to 89 min, Med 90 to 119 min, High 120 plus min, click any row to jump to that picker detail
+
+Design:
+Dark theme, background #0E0E0E, amber accent #F5A623, DM Sans for body text, DM Mono for numbers and data. Clean industrial look. No generic AI aesthetics.
+Packages needed:
+xlsx and recharts. Use React with hooks only, no class components. Single file App.jsx.
+Key parsing rules:
+
+Tab name parser: strip last 4 digits as year, remaining digits are month plus day concatenated
+Skip any picker group where row 1 value is not a real string (skip datetime objects, nulls, numbers)
+Skip any data row where the order column contains text notes like PULLERS or TEAM GOALS
+Time parser must handle: integer HHMM, Excel decimal fraction 0 to 1, semicolon separated string, colon separated string
+Deduplication: if same picker plus date is loaded again replace dont stack
+Weeks run Monday to Sunday"
