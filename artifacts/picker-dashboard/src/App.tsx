@@ -193,9 +193,6 @@ function parseSheet(
       orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes });
     }
     if (orders.length > 0) {
-      // DEBUG – logs every parsed order so we can see exactly what the parser
-      // is reading. Remove once the phantom-time issue is resolved.
-      console.warn(`[parseSheet] ${name} | ${dateStr} | col=${col} | ${orders.length} orders`, orders.map(o => ({ ord: o.orderNumber, lines: o.linesPicked, time: o.timeMinutes })));
       result[`${name}|${dateStr}`] = { pickerName: name, date, dateStr, orders };
     }
   }
@@ -227,11 +224,31 @@ function weekLabel(ws: string): string {
   return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
+/**
+ * Some sheets contain a secondary block of pick data below the main section
+ * (e.g. a different shift or date overflow).  Those rows have timestamps in the
+ * 1–2 AM range (< 150 min from midnight) while the main shift runs from 5 AM
+ * onwards (≥ 150 min).  When both groups are present we drop the early-morning
+ * cluster from TIMING analysis — it only creates false gaps.  Line counts from
+ * those same rows are still included in totals because the lines are real.
+ */
+function removePhantomTimes(times: number[]): number[] {
+  if (times.length <= 1) return times;
+  const PHANTOM_CUTOFF = 150; // 2:30 AM — before this is suspicious
+  const earlyTimes = times.filter(t => t < PHANTOM_CUTOFF);
+  const mainTimes  = times.filter(t => t >= PHANTOM_CUTOFF);
+  // Only strip early-morning times when there is ALSO a main-shift cluster.
+  // If ALL times are early-morning we keep them (might be a real night shift).
+  if (earlyTimes.length > 0 && mainTimes.length > 0) return mainTimes;
+  return times;
+}
+
 function computeDayStats(data: PickerDayData): DayStats {
   const { pickerName, dateStr, date, orders } = data;
   const totalOrders = orders.length;
   const totalLines  = orders.reduce((s, o) => s + o.linesPicked, 0);
-  const times = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null).sort((a, b) => a - b);
+  const rawTimes = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
+  const times = removePhantomTimes(rawTimes).sort((a, b) => a - b);
   let linesPerHour: number | null = null;
   let ordersPerHour: number | null = null;
   let activeWindowMinutes: number | null = null;
