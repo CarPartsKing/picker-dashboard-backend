@@ -13,8 +13,6 @@ export interface Pick {
   pickerName?: string | null;
   itemSku: string;
   quantity: number;
-  /** @nullable */
-  zone?: string | null;
   pickedAt: string;
   /** @nullable */
   durationSeconds?: number | null;

@@ -11,8 +11,6 @@ export interface PickerStats {
   pickerId: number;
   pickerName: string;
   employeeId: string;
-  /** @nullable */
-  zone?: string | null;
   totalPicks: number;
   totalItems: number;
   /** @nullable */

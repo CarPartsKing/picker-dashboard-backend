@@ -10,8 +10,6 @@ export interface Picker {
   id: number;
   name: string;
   employeeId: string;
-  /** @nullable */
-  zone?: string | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;

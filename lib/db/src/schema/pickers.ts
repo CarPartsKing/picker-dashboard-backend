@@ -6,7 +6,6 @@ export const pickersTable = pgTable("pickers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   employeeId: text("employee_id").notNull().unique(),
-  zone: text("zone"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

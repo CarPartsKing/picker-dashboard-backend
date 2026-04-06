@@ -19,10 +19,9 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, Activity, Target, Timer, Package, MapPin } from "lucide-react";
+import { ArrowLeft, Activity, Target, Timer, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function PickerProfile() {
@@ -52,14 +51,8 @@ export default function PickerProfile() {
           <h1 className="text-3xl font-bold tracking-tight">
             {isLoading ? <Skeleton className="h-9 w-48" /> : stats?.pickerName}
           </h1>
-          <div className="text-muted-foreground font-mono mt-1 flex items-center gap-2">
+          <div className="text-muted-foreground font-mono mt-1">
             {isLoading ? <Skeleton className="h-4 w-24" /> : stats?.employeeId}
-            {stats?.zone && (
-              <Badge variant="secondary" className="font-sans">
-                <MapPin className="h-3 w-3 mr-1" />
-                Zone: {stats.zone}
-              </Badge>
-            )}
           </div>
         </div>
       </div>
@@ -143,7 +136,6 @@ export default function PickerProfile() {
                   <TableHead>Time</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead>Zone</TableHead>
                   <TableHead>Duration</TableHead>
                 </TableRow>
               </TableHeader>
@@ -155,12 +147,11 @@ export default function PickerProfile() {
                       <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                       <TableCell className="text-right"><Skeleton className="h-5 w-8 ml-auto" /></TableCell>
                       <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                     </TableRow>
                   ))
                 ) : stats?.recentPicks?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                       No recent activity found.
                     </TableCell>
                   </TableRow>
@@ -172,13 +163,6 @@ export default function PickerProfile() {
                       </TableCell>
                       <TableCell className="font-bold">{pick.itemSku}</TableCell>
                       <TableCell className="text-right">{pick.quantity}</TableCell>
-                      <TableCell>
-                        {pick.zone ? (
-                          <Badge variant="outline">{pick.zone}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-xs italic">N/A</span>
-                        )}
-                      </TableCell>
                       <TableCell>
                         {pick.durationSeconds ? `${pick.durationSeconds}s` : '-'}
                       </TableCell>

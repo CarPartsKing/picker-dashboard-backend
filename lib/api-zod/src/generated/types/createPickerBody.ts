@@ -9,7 +9,5 @@
 export interface CreatePickerBody {
   name: string;
   employeeId: string;
-  /** @nullable */
-  zone?: string | null;
   active?: boolean;
 }

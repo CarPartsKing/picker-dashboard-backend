@@ -22,7 +22,6 @@ export const ListPickersResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   employeeId: zod.string(),
-  zone: zod.string().nullish(),
   active: zod.boolean(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -35,7 +34,6 @@ export const ListPickersResponse = zod.array(ListPickersResponseItem);
 export const CreatePickerBody = zod.object({
   name: zod.string(),
   employeeId: zod.string(),
-  zone: zod.string().nullish(),
   active: zod.boolean().optional(),
 });
 
@@ -50,7 +48,6 @@ export const GetPickerResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   employeeId: zod.string(),
-  zone: zod.string().nullish(),
   active: zod.boolean(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -66,7 +63,6 @@ export const UpdatePickerParams = zod.object({
 export const UpdatePickerBody = zod.object({
   name: zod.string().optional(),
   employeeId: zod.string().optional(),
-  zone: zod.string().nullish(),
   active: zod.boolean().optional(),
 });
 
@@ -74,7 +70,6 @@ export const UpdatePickerResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   employeeId: zod.string(),
-  zone: zod.string().nullish(),
   active: zod.boolean(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -102,7 +97,6 @@ export const ListPicksResponseItem = zod.object({
   pickerName: zod.string().nullish(),
   itemSku: zod.string(),
   quantity: zod.number(),
-  zone: zod.string().nullish(),
   pickedAt: zod.string(),
   durationSeconds: zod.number().nullish(),
   notes: zod.string().nullish(),
@@ -117,7 +111,6 @@ export const CreatePickBody = zod.object({
   pickerId: zod.number(),
   itemSku: zod.string(),
   quantity: zod.number(),
-  zone: zod.string().nullish(),
   pickedAt: zod.string(),
   durationSeconds: zod.number().nullish(),
   notes: zod.string().nullish(),
@@ -136,7 +129,6 @@ export const GetPickResponse = zod.object({
   pickerName: zod.string().nullish(),
   itemSku: zod.string(),
   quantity: zod.number(),
-  zone: zod.string().nullish(),
   pickedAt: zod.string(),
   durationSeconds: zod.number().nullish(),
   notes: zod.string().nullish(),
@@ -200,7 +192,6 @@ export const GetPickerStatsResponse = zod.object({
   pickerId: zod.number(),
   pickerName: zod.string(),
   employeeId: zod.string(),
-  zone: zod.string().nullish(),
   totalPicks: zod.number(),
   totalItems: zod.number(),
   avgDurationSeconds: zod.number().nullish(),
@@ -213,7 +204,6 @@ export const GetPickerStatsResponse = zod.object({
       pickerName: zod.string().nullish(),
       itemSku: zod.string(),
       quantity: zod.number(),
-      zone: zod.string().nullish(),
       pickedAt: zod.string(),
       durationSeconds: zod.number().nullish(),
       notes: zod.string().nullish(),

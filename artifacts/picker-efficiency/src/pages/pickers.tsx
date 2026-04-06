@@ -68,7 +68,6 @@ import React from "react";
 const pickerSchema = z.object({
   name: z.string().min(2, "Name is required"),
   employeeId: z.string().min(2, "Employee ID is required"),
-  zone: z.string().optional().nullable(),
   active: z.boolean().default(true),
 });
 
@@ -92,7 +91,6 @@ export default function PickersList() {
     defaultValues: {
       name: "",
       employeeId: "",
-      zone: "",
       active: true,
     },
   });
@@ -102,7 +100,6 @@ export default function PickersList() {
     defaultValues: {
       name: "",
       employeeId: "",
-      zone: "",
       active: true,
     },
   });
@@ -170,8 +167,7 @@ export default function PickersList() {
 
   const filteredPickers = pickers?.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.zone && p.zone.toLowerCase().includes(searchTerm.toLowerCase()))
+    p.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -226,19 +222,6 @@ export default function PickersList() {
                 />
                 <FormField
                   control={addForm.control}
-                  name="zone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Default Zone (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. A1, North Wing" {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={addForm.control}
                   name="active"
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
@@ -284,7 +267,6 @@ export default function PickersList() {
             <TableRow>
               <TableHead>Picker Name</TableHead>
               <TableHead>ID</TableHead>
-              <TableHead>Zone</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -296,13 +278,12 @@ export default function PickersList() {
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
                 </TableRow>
               ))
             ) : filteredPickers?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
                   No pickers found matching your search.
                 </TableCell>
               </TableRow>
@@ -315,7 +296,6 @@ export default function PickersList() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{picker.employeeId}</TableCell>
-                  <TableCell>{picker.zone || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
                   <TableCell>
                     {picker.active ? (
                       <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800">
@@ -347,7 +327,6 @@ export default function PickersList() {
                             editForm.reset({
                               name: picker.name,
                               employeeId: picker.employeeId,
-                              zone: picker.zone,
                               active: picker.active
                             });
                             setEditingPicker(picker.id);
@@ -388,19 +367,6 @@ export default function PickersList() {
                                       <FormLabel>Employee ID</FormLabel>
                                       <FormControl>
                                         <Input {...field} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={editForm.control}
-                                  name="zone"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Default Zone (Optional)</FormLabel>
-                                      <FormControl>
-                                        <Input {...field} value={field.value || ""} />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>

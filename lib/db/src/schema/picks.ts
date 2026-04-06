@@ -8,7 +8,6 @@ export const picksTable = pgTable("picks", {
   pickerId: integer("picker_id").notNull().references(() => pickersTable.id, { onDelete: "cascade" }),
   itemSku: text("item_sku").notNull(),
   quantity: integer("quantity").notNull().default(1),
-  zone: text("zone"),
   pickedAt: timestamp("picked_at", { withTimezone: true }).notNull(),
   durationSeconds: integer("duration_seconds"),
   notes: text("notes"),

@@ -127,7 +127,7 @@ export default function Dashboard() {
         <Card className="md:col-span-4">
           <CardHeader>
             <CardTitle>Throughput Trend (14 Days)</CardTitle>
-            <CardDescription>Daily pick volume across all active zones</CardDescription>
+            <CardDescription>Daily pick volume across all pickers</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
             {isLoadingTrends ? (

@@ -58,7 +58,6 @@ const pickSchema = z.object({
   pickerId: z.coerce.number().min(1, "Picker is required"),
   itemSku: z.string().min(2, "SKU is required"),
   quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
-  zone: z.string().optional().nullable(),
   pickedAt: z.string().min(1, "Time is required"),
   durationSeconds: z.coerce.number().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -99,7 +98,6 @@ export default function PicksLog() {
       pickerId: urlPickerId ? parseInt(urlPickerId) : 0,
       itemSku: "",
       quantity: 1,
-      zone: "",
       pickedAt: new Date().toISOString().slice(0, 16), // YYYY-MM-DDThh:mm
       durationSeconds: null,
       notes: "",
@@ -122,7 +120,6 @@ export default function PicksLog() {
           pickerId: values.pickerId,
           itemSku: "",
           quantity: 1,
-          zone: values.zone,
           pickedAt: new Date().toISOString().slice(0, 16),
           durationSeconds: null,
           notes: "",
@@ -167,7 +164,6 @@ export default function PicksLog() {
   const filteredPicks = picks?.filter(p => 
     p.itemSku.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.pickerName && p.pickerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (p.zone && p.zone.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (p.notes && p.notes.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -252,21 +248,7 @@ export default function PicksLog() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={addForm.control}
-                    name="zone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Zone (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="A1" {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
+                <FormField
                     control={addForm.control}
                     name="durationSeconds"
                     render={({ field }) => (
@@ -285,7 +267,6 @@ export default function PicksLog() {
                       </FormItem>
                     )}
                   />
-                </div>
 
                 <FormField
                   control={addForm.control}
@@ -335,7 +316,7 @@ export default function PicksLog() {
         <div className="flex-1 flex items-center space-x-2 bg-background border rounded-md px-3 py-2">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="Search SKUs, zones, notes..." 
+            placeholder="Search SKUs, pickers, notes..." 
             className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-8 p-0"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -368,7 +349,6 @@ export default function PicksLog() {
               <TableHead>Picker</TableHead>
               <TableHead>SKU</TableHead>
               <TableHead className="text-right">Qty</TableHead>
-              <TableHead>Zone</TableHead>
               <TableHead>Duration</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -382,7 +362,6 @@ export default function PicksLog() {
                   <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                   <TableCell className="text-right"><Skeleton className="h-5 w-8 ml-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-12" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                   <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
@@ -390,7 +369,7 @@ export default function PicksLog() {
               ))
             ) : filteredPicks?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                   No pick logs found matching your criteria.
                 </TableCell>
               </TableRow>
@@ -411,13 +390,6 @@ export default function PicksLog() {
                   </TableCell>
                   <TableCell className="font-bold font-mono text-sm">{pick.itemSku}</TableCell>
                   <TableCell className="text-right font-medium">{pick.quantity}</TableCell>
-                  <TableCell>
-                    {pick.zone ? (
-                      <Badge variant="secondary" className="font-mono text-xs">{pick.zone}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs italic">N/A</span>
-                    )}
-                  </TableCell>
                   <TableCell>
                     {pick.durationSeconds ? (
                       <span className="font-mono text-xs text-blue-600 dark:text-blue-400">

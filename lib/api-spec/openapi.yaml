@@ -362,8 +362,6 @@ components:
           type: string
         employeeId:
           type: string
-        zone:
-          type: ["string", "null"]
         active:
           type: boolean
         createdAt:
@@ -385,8 +383,6 @@ components:
           type: string
         employeeId:
           type: string
-        zone:
-          type: ["string", "null"]
         active:
           type: boolean
       required:
@@ -400,8 +396,6 @@ components:
           type: string
         employeeId:
           type: string
-        zone:
-          type: ["string", "null"]
         active:
           type: boolean
 
@@ -418,8 +412,6 @@ components:
           type: string
         quantity:
           type: integer
-        zone:
-          type: ["string", "null"]
         pickedAt:
           type: string
         durationSeconds:
@@ -445,8 +437,6 @@ components:
           type: string
         quantity:
           type: integer
-        zone:
-          type: ["string", "null"]
         pickedAt:
           type: string
         durationSeconds:
@@ -523,8 +513,6 @@ components:
           type: string
         employeeId:
           type: string
-        zone:
-          type: ["string", "null"]
         totalPicks:
           type: integer
         totalItems:

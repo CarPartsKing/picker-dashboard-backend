@@ -10,8 +10,6 @@ export interface CreatePickBody {
   pickerId: number;
   itemSku: string;
   quantity: number;
-  /** @nullable */
-  zone?: string | null;
   pickedAt: string;
   /** @nullable */
   durationSeconds?: number | null;

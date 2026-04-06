@@ -17,8 +17,6 @@ export interface Picker {
   id: number;
   name: string;
   employeeId: string;
-  /** @nullable */
-  zone?: string | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -27,16 +25,12 @@ export interface Picker {
 export interface CreatePickerBody {
   name: string;
   employeeId: string;
-  /** @nullable */
-  zone?: string | null;
   active?: boolean;
 }
 
 export interface UpdatePickerBody {
   name?: string;
   employeeId?: string;
-  /** @nullable */
-  zone?: string | null;
   active?: boolean;
 }
 
@@ -47,8 +41,6 @@ export interface Pick {
   pickerName?: string | null;
   itemSku: string;
   quantity: number;
-  /** @nullable */
-  zone?: string | null;
   pickedAt: string;
   /** @nullable */
   durationSeconds?: number | null;
@@ -61,8 +53,6 @@ export interface CreatePickBody {
   pickerId: number;
   itemSku: string;
   quantity: number;
-  /** @nullable */
-  zone?: string | null;
   pickedAt: string;
   /** @nullable */
   durationSeconds?: number | null;
@@ -99,8 +89,6 @@ export interface PickerStats {
   pickerId: number;
   pickerName: string;
   employeeId: string;
-  /** @nullable */
-  zone?: string | null;
   totalPicks: number;
   totalItems: number;
   /** @nullable */
