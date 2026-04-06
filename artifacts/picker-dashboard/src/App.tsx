@@ -7,21 +7,21 @@ import {
 } from 'recharts';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const BG   = '#0E0E0E';
-const BG2  = '#161616';
-const BG3  = '#202020';
-const AMBER = '#F5A623';
-const TEXT  = '#EEEEEE';
-const DIM   = '#666666';
-const BORDER = '#2C2C2C';
-const GREEN  = '#22C55E';
-const YELLOW = '#EAB308';
-const RED    = '#EF4444';
+const BG   = '#08080F';
+const BG2  = 'rgba(255,255,255,0.04)';
+const BG3  = 'rgba(255,255,255,0.07)';
+const AMBER  = '#FF9F0A';
+const TEXT   = '#F5F5F7';
+const DIM    = 'rgba(255,255,255,0.38)';
+const BORDER = 'rgba(255,255,255,0.08)';
+const GREEN  = '#30D158';
+const YELLOW = '#FFD60A';
+const RED    = '#FF453A';
 
 const PICKER_COLORS = [
-  '#F5A623','#3B82F6','#22C55E','#A855F7',
-  '#EC4899','#06B6D4','#F97316','#84CC16',
-  '#8B5CF6','#14B8A6',
+  '#FF9F0A','#3B82F6','#30D158','#BF5AF2',
+  '#FF375F','#32D2F2','#FF6B35','#ACE834',
+  '#7D7AFF','#2AC3C3',
 ];
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -293,23 +293,31 @@ function assignRatings(statsByDate: Map<string, DayStats[]>) {
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
-const mono: React.CSSProperties = { fontFamily: "'DM Mono', 'Fira Code', 'Menlo', monospace" };
-const card: React.CSSProperties = { background: BG2, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 18 };
-const th: React.CSSProperties = { padding: '9px 12px', fontSize: 10, color: DIM, textAlign: 'left', borderBottom: `1px solid ${BORDER}`, textTransform: 'uppercase', letterSpacing: '0.09em', whiteSpace: 'nowrap' };
-const td: React.CSSProperties = { padding: '8px 12px', fontSize: 12, borderBottom: `1px solid ${BORDER}` };
+const mono: React.CSSProperties = { fontFamily: "'SF Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, monospace" };
+const glass: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.04)',
+  backdropFilter: 'blur(24px)',
+  WebkitBackdropFilter: 'blur(24px)',
+  border: '1px solid rgba(255,255,255,0.09)',
+  borderRadius: 16,
+  boxShadow: '0 4px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
+};
+const card: React.CSSProperties = { ...glass, padding: 20 };
+const th: React.CSSProperties = { padding: '10px 14px', fontSize: 10, color: DIM, textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)', textTransform: 'uppercase', letterSpacing: '0.11em', fontWeight: 600, whiteSpace: 'nowrap' };
+const td: React.CSSProperties = { padding: '10px 14px', fontSize: 12, borderBottom: '1px solid rgba(255,255,255,0.04)' };
 const tbl: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' };
-const section: React.CSSProperties = { marginBottom: 28 };
-const secTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: DIM, marginBottom: 12 };
+const section: React.CSSProperties = { marginBottom: 32 };
+const secTitle: React.CSSProperties = { fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: DIM, marginBottom: 14 };
 
 function pill(text: string, bg: string, fg: string): React.ReactElement {
-  return <span style={{ display: 'inline-block', padding: '2px 7px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: bg, color: fg, ...mono }}>{text}</span>;
+  return <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: bg, color: fg, ...mono, letterSpacing: '0.04em' }}>{text}</span>;
 }
 function btn(label: string, onClick: () => void, style?: React.CSSProperties): React.ReactElement {
-  return <button onClick={onClick} style={{ padding: '5px 14px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${BORDER}`, background: BG3, color: TEXT, fontFamily: 'inherit', ...style }}>{label}</button>;
+  return <button onClick={onClick} style={{ padding: '6px 16px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)', color: TEXT, fontFamily: 'inherit', letterSpacing: '0.01em', transition: 'all 0.15s', ...style }}>{label}</button>;
 }
 function selEl(value: string, onChange: (v: string) => void, options: string[]): React.ReactElement {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ background: BG3, border: `1px solid ${BORDER}`, color: TEXT, padding: '6px 10px', borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }}>
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: TEXT, padding: '7px 12px', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', backdropFilter: 'blur(10px)', outline: 'none' }}>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>
   );
@@ -352,7 +360,7 @@ function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
 
   return (
     <tr>
-      <td colSpan={colSpan} style={{ padding: 0, background: '#111', borderBottom: `1px solid ${BORDER}` }}>
+      <td colSpan={colSpan} style={{ padding: 0, background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ padding: '14px 22px 16px' }}>
           <div style={{ fontSize: 10, color: DIM, marginBottom: 10, letterSpacing: '0.09em', textTransform: 'uppercase' }}>
             Raw parsed orders — {orders.length} total · {timestamped} timestamped · {totalLines} lines picked
@@ -407,10 +415,10 @@ function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
 const DarkTip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: BG3, border: `1px solid ${BORDER}`, borderRadius: 5, padding: '8px 12px', fontSize: 11 }}>
-      {label && <div style={{ color: DIM, marginBottom: 4 }}>{label}</div>}
+    <div style={{ ...glass, padding: '10px 14px', fontSize: 11 }}>
+      {label && <div style={{ color: DIM, marginBottom: 6, fontSize: 10, letterSpacing: '0.06em' }}>{label}</div>}
       {payload.map((p, i) => (
-        <div key={i} style={{ color: p.color, ...mono }}>
+        <div key={i} style={{ color: p.color, ...mono, marginBottom: 2 }}>
           {p.name}: <strong>{typeof p.value === 'number' ? p.value % 1 === 0 ? p.value : p.value.toFixed(2) : p.value}</strong>
         </div>
       ))}
@@ -424,31 +432,29 @@ function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
   dateRange: { first: string; last: string; days: number } | null;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, background: '#0A0A0A' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ ...mono, color: AMBER, fontWeight: 700, fontSize: 17, letterSpacing: '0.06em' }}>PICK TRACK</span>
-        <span style={{ background: BG3, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 8px', fontSize: 10, color: DIM, letterSpacing: '0.06em' }}>AUTOMOTIVE AFTERMARKET</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(8,8,15,0.75)', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em', color: TEXT }}>
+          Pick<span style={{ color: AMBER }}> Track</span>
+        </span>
+        <span style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '3px 10px', fontSize: 10, color: DIM, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Automotive</span>
         {dateRange && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,166,35,0.08)', border: `1px solid rgba(245,166,35,0.25)`, borderRadius: 4, padding: '3px 10px' }}>
-            <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Data</span>
-            <span style={{ ...mono, fontSize: 12, color: AMBER }}>
-              {fmtDate(dateRange.first)}
-            </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,159,10,0.1)', border: '1px solid rgba(255,159,10,0.22)', borderRadius: 20, padding: '3px 12px' }}>
+            <span style={{ ...mono, fontSize: 12, color: AMBER }}>{fmtDate(dateRange.first)}</span>
             {dateRange.first !== dateRange.last && (
               <>
                 <span style={{ color: DIM, fontSize: 10 }}>→</span>
                 <span style={{ ...mono, fontSize: 12, color: AMBER }}>{fmtDate(dateRange.last)}</span>
               </>
             )}
-            <span style={{ fontSize: 10, color: DIM }}>·</span>
-            <span style={{ ...mono, fontSize: 11, color: DIM }}>{dateRange.days}d</span>
+            <span style={{ fontSize: 10, color: DIM }}>· {dateRange.days}d</span>
           </span>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {lastUpdated && <span style={{ fontSize: 11, color: DIM, ...mono }}>Updated {lastUpdated.toLocaleString()}</span>}
-        {hasData && btn('File History', onToggleHistory)}
-        {hasData && btn('Clear Data', onClear, { color: RED, borderColor: RED })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {lastUpdated && <span style={{ fontSize: 11, color: DIM, ...mono }}>{lastUpdated.toLocaleTimeString()}</span>}
+        {hasData && btn('History', onToggleHistory)}
+        {hasData && btn('Clear', onClear, { color: RED, borderColor: 'rgba(255,69,58,0.35)', background: 'rgba(255,69,58,0.08)' })}
       </div>
     </div>
   );
@@ -457,8 +463,8 @@ function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
 // ─── FILE HISTORY PANEL ───────────────────────────────────────────────────────
 function FileHistoryPanel({ history }: { history: FileHistoryEntry[] }) {
   return (
-    <div style={{ background: '#0A0A0A', borderBottom: `1px solid ${BORDER}`, padding: '10px 24px' }}>
-      <div style={{ fontSize: 10, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>File History</div>
+    <div style={{ background: 'rgba(8,8,15,0.6)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '10px 28px' }}>
+      <div style={{ fontSize: 10, color: DIM, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>File History</div>
       {!history.length
         ? <div style={{ color: DIM, fontSize: 12 }}>No files loaded.</div>
         : [...history].reverse().map((h, i) => (
@@ -487,35 +493,35 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
 
   if (compact) {
     return (
-      <div style={{ borderTop: `1px solid ${BORDER}`, padding: '8px 24px', background: '#0A0A0A', display: 'flex', alignItems: 'center', gap: 12 }}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '10px 28px', background: 'rgba(8,8,15,0.6)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', gap: 12 }}
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
       >
         <input ref={inputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: 'none' }} onChange={e => e.target.files && onFiles(e.target.files)} />
-        <button onClick={() => inputRef.current?.click()} style={{ padding: '5px 14px', borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none', background: AMBER, color: '#000', fontFamily: 'inherit' }}>+ Load File</button>
-        <span style={{ fontSize: 11, color: DIM }}>Drop an xlsx file anywhere to load or update data</span>
-        {isDragging && <span style={{ color: AMBER, fontSize: 11 }}>● Drop now</span>}
+        <button onClick={() => inputRef.current?.click()} style={{ padding: '6px 18px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: AMBER, color: '#000', fontFamily: 'inherit' }}>+ Load File</button>
+        <span style={{ fontSize: 11, color: DIM }}>Drop an xlsx anywhere to update data</span>
+        {isDragging && <span style={{ color: AMBER, fontSize: 11, ...mono }}>● Drop now</span>}
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '100px 24px', minHeight: '70vh' }}>
       <div
-        style={{ border: `2px dashed ${isDragging ? AMBER : BORDER}`, borderRadius: 8, padding: '52px 40px', textAlign: 'center', background: isDragging ? 'rgba(245,166,35,0.04)' : BG2, cursor: 'pointer', transition: 'all 0.2s', maxWidth: 500, width: '100%' }}
+        style={{ ...glass, border: `2px dashed ${isDragging ? AMBER : 'rgba(255,255,255,0.12)'}`, borderRadius: 24, padding: '60px 48px', textAlign: 'center', background: isDragging ? 'rgba(255,159,10,0.06)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'all 0.2s ease', maxWidth: 520, width: '100%' }}
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
       >
         <input ref={inputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: 'none' }} onChange={e => e.target.files && onFiles(e.target.files)} />
-        <div style={{ fontSize: 36, marginBottom: 14 }}>📊</div>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: isDragging ? AMBER : TEXT }}>Drop your Excel file here</div>
-        <div style={{ fontSize: 13, color: DIM, marginBottom: 22, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 44, marginBottom: 18, opacity: 0.9 }}>📊</div>
+        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 10, color: isDragging ? AMBER : TEXT, letterSpacing: '-0.01em' }}>Drop your Excel file here</div>
+        <div style={{ fontSize: 13, color: DIM, marginBottom: 28, lineHeight: 1.7 }}>
           Date-named tabs (412026, 4102026…)<br />Wide format: Order · Lines · Time repeating per picker
         </div>
-        <button style={{ padding: '8px 22px', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: AMBER, color: '#000', fontFamily: 'inherit' }}>Browse File</button>
+        <button style={{ padding: '10px 28px', borderRadius: 22, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: AMBER, color: '#000', fontFamily: 'inherit', letterSpacing: '0.01em' }}>Browse File</button>
       </div>
     </div>
   );
@@ -531,13 +537,19 @@ const TABS = [
 ];
 function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setActiveTab: (t: string) => void; gapCount: number }) {
   return (
-    <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, background: '#0A0A0A', paddingLeft: 20 }}>
-      {TABS.map(t => (
-        <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: '10px 18px', fontSize: 12, fontWeight: activeTab === t.id ? 700 : 500, color: activeTab === t.id ? AMBER : DIM, borderBottom: `2px solid ${activeTab === t.id ? AMBER : 'transparent'}`, cursor: 'pointer', background: 'none', border: 'none', outline: 'none', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {t.label}
-          {t.id === 'gap-flags' && gapCount > 0 && <span style={{ background: RED, color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 700 }}>{gapCount}</span>}
-        </button>
-      ))}
+    <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(8,8,15,0.5)', backdropFilter: 'blur(20px)', paddingLeft: 20, paddingRight: 20, gap: 2 }}>
+      {TABS.map(t => {
+        const active = activeTab === t.id;
+        return (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{ padding: '12px 16px', fontSize: 12, fontWeight: active ? 600 : 400, color: active ? TEXT : DIM, borderBottom: `2px solid ${active ? AMBER : 'transparent'}`, cursor: 'pointer', background: 'none', border: 'none', borderRadius: 0, outline: 'none', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s, border-color 0.15s', letterSpacing: '0.01em' }}>
+            {t.label}
+            {t.id === 'gap-flags' && gapCount > 0 && (
+              <span style={{ background: RED, color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 9, fontWeight: 700 }}>{gapCount}</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -545,10 +557,10 @@ function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setA
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div style={{ ...card, padding: '14px 18px' }}>
-      <div style={{ fontSize: 10, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || AMBER, ...mono }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: DIM, marginTop: 3 }}>{sub}</div>}
+    <div style={{ ...card, padding: '16px 20px' }}>
+      <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.13em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 600, color: color || AMBER, ...mono, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: DIM, marginTop: 6, letterSpacing: '0.02em' }}>{sub}</div>}
     </div>
   );
 }
@@ -1324,7 +1336,7 @@ export default function App() {
     : null;
 
   return (
-    <div style={{ background: BG, minHeight: '100vh', fontFamily: "'DM Sans', 'Inter', ui-sans-serif, sans-serif", color: TEXT, fontSize: 13 }}>
+    <div style={{ minHeight: '100vh', fontFamily: "-apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", color: TEXT, fontSize: 13 }}>
       <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} hasData={hasData} dateRange={dateRange} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
