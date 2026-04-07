@@ -1977,7 +1977,9 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           </div>
         </div>
       )}
-
+    </div>
+  );
+}
 
 // ─── GAP FLAGS TAB ────────────────────────────────────────────────────────────
 function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump, pickerData }: {
