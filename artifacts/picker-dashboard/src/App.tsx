@@ -849,10 +849,10 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
 // ─── TAB BAR ─────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'overview',      label: 'Overview' },
-  { id: 'score',         label: 'Score' },
+  { id: 'picker-detail', label: 'Picker Detail' },
   { id: 'weekly',        label: 'Weekly' },
   { id: 'compare',       label: 'Compare' },
-  { id: 'picker-detail', label: 'Picker Detail' },
+  { id: 'score',         label: 'Score' },
   { id: 'gap-flags',     label: 'Gap Flags' },
 ];
 function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setActiveTab: (t: string) => void; gapCount: number }) {
