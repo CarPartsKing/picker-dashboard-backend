@@ -315,11 +315,39 @@ function pill(text: string, bg: string, fg: string): React.ReactElement {
 function btn(label: string, onClick: () => void, style?: React.CSSProperties): React.ReactElement {
   return <button onClick={onClick} style={{ padding: '6px 16px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)', color: TEXT, fontFamily: 'inherit', letterSpacing: '0.01em', transition: 'all 0.15s', ...style }}>{label}</button>;
 }
-function selEl(value: string, onChange: (v: string) => void, options: string[]): React.ReactElement {
+function Dropdown({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: TEXT, padding: '7px 12px', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', backdropFilter: 'blur(10px)', outline: 'none' }}>
-      {options.map(o => <option key={o} value={o}>{o}</option>)}
-    </select>
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block', minWidth: 160 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)', color: TEXT, fontFamily: 'inherit', outline: 'none' }}
+      >
+        <span>{value || '—'}</span>
+        <span style={{ color: DIM, fontSize: 10, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 200, background: 'rgba(18,18,28,0.96)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', maxHeight: 280, overflowY: 'auto' }}>
+          {options.map(o => (
+            <div
+              key={o}
+              onClick={() => { onChange(o); setOpen(false); }}
+              style={{ padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: o === value ? AMBER : TEXT, background: o === value ? 'rgba(255,159,10,0.1)' : 'transparent', transition: 'background 0.1s', fontFamily: 'inherit' }}
+              onMouseEnter={e => { if (o !== value) (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
+              onMouseLeave={e => { if (o !== value) (e.target as HTMLElement).style.background = 'transparent'; }}
+            >
+              {o}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -905,9 +933,9 @@ function CompareTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerNam
   return (
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ display: 'flex', gap: 20, marginBottom: 24, alignItems: 'flex-end' }}>
-        <div><div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Picker A</div>{selEl(pA, setPA, pickerNames)}</div>
+        <div><div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Picker A</div><Dropdown value={pA} onChange={setPA} options={pickerNames} /></div>
         <div style={{ color: DIM, fontSize: 18, paddingBottom: 6 }}>vs</div>
-        <div><div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Picker B</div>{selEl(pB, setPB, pickerNames)}</div>
+        <div><div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Picker B</div><Dropdown value={pB} onChange={setPB} options={pickerNames} /></div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
@@ -1043,7 +1071,7 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Select Picker</div>
-        {selEl(sel, setSel, pickerNames)}
+        <Dropdown value={sel} onChange={setSel} options={pickerNames} />
       </div>
 
       <div style={{ ...section }}>
