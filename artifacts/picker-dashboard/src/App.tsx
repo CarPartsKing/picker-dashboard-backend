@@ -292,6 +292,37 @@ function assignRatings(statsByDate: Map<string, DayStats[]>) {
   }
 }
 
+// ─── BATCH / CLUSTER ANALYSIS ─────────────────────────────────────────────────
+const BATCH_GAP_MINUTES = 8;
+
+interface Batch { orderCount: number; lineCount: number; }
+
+function computeBatches(orders: Order[], gapMin = BATCH_GAP_MINUTES): Batch[] {
+  const timed = [...orders].filter(o => o.timeMinutes != null).sort((a, b) => a.timeMinutes! - b.timeMinutes!);
+  if (!timed.length) return [];
+  const batches: Batch[] = [];
+  let cur = [timed[0]];
+  for (let i = 1; i < timed.length; i++) {
+    if (timed[i].timeMinutes! - timed[i - 1].timeMinutes! >= gapMin) {
+      batches.push({ orderCount: cur.length, lineCount: cur.reduce((s, o) => s + o.linesPicked, 0) });
+      cur = [timed[i]];
+    } else {
+      cur.push(timed[i]);
+    }
+  }
+  batches.push({ orderCount: cur.length, lineCount: cur.reduce((s, o) => s + o.linesPicked, 0) });
+  return batches;
+}
+
+function pickerBatchStats(allOrders: Order[]) {
+  const batches = computeBatches(allOrders);
+  if (!batches.length) return null;
+  const avgOrders = batches.reduce((s, b) => s + b.orderCount, 0) / batches.length;
+  const avgLines  = batches.reduce((s, b) => s + b.lineCount,  0) / batches.length;
+  const maxBatch  = Math.max(...batches.map(b => b.orderCount));
+  return { batches, avgOrders, avgLines, maxBatch, totalRuns: batches.length };
+}
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const mono: React.CSSProperties = { fontFamily: "'SF Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, monospace" };
 const glass: React.CSSProperties = {
@@ -593,8 +624,9 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
 }
 
 // ─── OVERVIEW TAB ─────────────────────────────────────────────────────────────
-function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
+function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData }: {
   allStats: DayStats[]; allDates: string[]; pickerNames: string[]; allGapFlags: GapFlag[];
+  pickerData: Record<string, PickerDayData>;
 }) {
   const latestDate = allDates[allDates.length - 1] ?? '';
   const todayStats = allStats.filter(s => s.dateStr === latestDate);
@@ -604,6 +636,16 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
   const todayAvgLph = todayLphArr.length ? todayLphArr.reduce((s, d) => s + d.linesPerHour!, 0) / todayLphArr.length : 0;
   const totalLinesAll = allStats.reduce((s, d) => s + d.totalLines, 0);
   const totalOrdersAll = allStats.reduce((s, d) => s + d.totalOrders, 0);
+
+  const batchRows = pickerNames.map((name, i) => {
+    const orders = Object.values(pickerData)
+      .filter(d => d.pickerName === name)
+      .flatMap(d => d.orders);
+    const bs = pickerBatchStats(orders);
+    return { name, bs, color: PICKER_COLORS[i % PICKER_COLORS.length] };
+  }).filter(r => r.bs !== null) as { name: string; bs: NonNullable<ReturnType<typeof pickerBatchStats>>; color: string }[];
+
+  const maxAvgOrders = batchRows.length ? Math.max(...batchRows.map(r => r.bs.avgOrders)) : 1;
 
   const leaderboard = pickerNames.map((name, i) => {
     const days = allStats.filter(s => s.pickerName === name);
@@ -651,6 +693,50 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
           ))}
         </div>
       </div>
+
+      {batchRows.length > 0 && (
+        <div style={{ ...section }}>
+          <div style={secTitle}>Order Clustering — Avg Orders per Run <span style={{ fontSize: 10, color: DIM, fontWeight: 400 }}>≥{BATCH_GAP_MINUTES} min gap = new run</span></div>
+          <div style={{ ...card, padding: '20px 24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[...batchRows].sort((a, b) => b.bs.avgOrders - a.bs.avgOrders).map(r => {
+                const pct = (r.bs.avgOrders / maxAvgOrders) * 100;
+                return (
+                  <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 110, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{r.name.split(' ')[0]}</div>
+                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: 6, height: 22, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: r.color, borderRadius: 6, minWidth: 4, transition: 'width 0.3s' }} />
+                    </div>
+                    <div style={{ ...mono, fontSize: 13, fontWeight: 700, color: r.color, width: 34, textAlign: 'right' }}>{r.bs.avgOrders.toFixed(1)}</div>
+                    <div style={{ fontSize: 11, color: DIM, width: 96, flexShrink: 0 }}>avg {r.bs.avgLines.toFixed(1)} L/run</div>
+                    <div style={{ fontSize: 11, color: DIM, width: 70, flexShrink: 0 }}>max {r.bs.maxBatch} orders</div>
+                    <div style={{ fontSize: 11, color: DIM, width: 60, flexShrink: 0 }}>{r.bs.totalRuns} runs</div>
+                  </div>
+                );
+              })}
+            </div>
+            {(() => {
+              const sorted = [...batchRows].sort((a, b) => b.bs.avgOrders - a.bs.avgOrders);
+              const top = sorted[0];
+              const bot = sorted[sorted.length - 1];
+              if (!top || top.name === bot.name) return null;
+              const diff = ((top.bs.avgOrders - bot.bs.avgOrders) / bot.bs.avgOrders * 100);
+              return (
+                <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 10 }}>
+                  <span style={{ background: 'rgba(48,209,88,0.12)', color: GREEN, borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 600 }}>
+                    Biggest batches: {top.name.split(' ')[0]} ({top.bs.avgOrders.toFixed(1)} orders/run)
+                  </span>
+                  {diff > 10 && (
+                    <span style={{ background: 'rgba(255,159,10,0.1)', color: AMBER, borderRadius: 20, padding: '3px 12px', fontSize: 11 }}>
+                      {diff.toFixed(0)}% more per run than {bot.name.split(' ')[0]}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {chartData.length > 0 && (
         <div style={{ ...section }}>
@@ -1021,6 +1107,12 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   const teamAvgLph = teamLphs.length ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
   const vsTeam = teamAvgLph > 0 ? ((avgLph - teamAvgLph) / teamAvgLph) * 100 : 0;
 
+  // ── Batch clustering ─────────────────────────────────────────────────────────
+  const pickerAllOrders = Object.values(pickerData)
+    .filter(d => d.pickerName === sel)
+    .flatMap(d => d.orders);
+  const batchStats = pickerBatchStats(pickerAllOrders);
+
   // ── Trend direction: last 5 days vs prior 5 days (by L/Hr) ──────────────────
   const lphSorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
   const last5  = lphSorted.slice(-5);
@@ -1123,6 +1215,58 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
             <div style={{ ...card, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               {col(strengths, GREEN, 'Strengths')}
               {col(focus, YELLOW, 'Focus Areas')}
+            </div>
+          </div>
+        );
+      })()}
+
+      {batchStats && (() => {
+        const sizeBuckets = [
+          { label: '1', count: batchStats.batches.filter(b => b.orderCount === 1).length },
+          { label: '2–3', count: batchStats.batches.filter(b => b.orderCount >= 2 && b.orderCount <= 3).length },
+          { label: '4–5', count: batchStats.batches.filter(b => b.orderCount >= 4 && b.orderCount <= 5).length },
+          { label: '6+', count: batchStats.batches.filter(b => b.orderCount >= 6).length },
+        ];
+        const maxCount = Math.max(...sizeBuckets.map(b => b.count), 1);
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Order Clustering <span style={{ fontSize: 10, color: DIM, fontWeight: 400 }}>≥{BATCH_GAP_MINUTES} min gap = new run</span></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ ...card, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Avg Orders / Run</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: AMBER, ...mono }}>{batchStats.avgOrders.toFixed(1)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Avg Lines / Run</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: TEXT, ...mono }}>{batchStats.avgLines.toFixed(1)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Biggest Run</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: GREEN, ...mono }}>{batchStats.maxBatch}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Total Runs</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: DIM, ...mono }}>{batchStats.totalRuns}</div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ ...card, padding: '16px 20px' }}>
+                <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Run Size Distribution</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 70 }}>
+                  {sizeBuckets.map(b => (
+                    <div key={b.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 11, color: TEXT, fontWeight: 600 }}>{b.count || ''}</div>
+                      <div style={{ width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: 4, height: 48, display: 'flex', alignItems: 'flex-end' }}>
+                        <div style={{ width: '100%', background: AMBER, borderRadius: 4, height: `${(b.count / maxCount) * 100}%`, opacity: b.count === 0 ? 0.15 : 1, minHeight: b.count > 0 ? 4 : 0, transition: 'height 0.3s' }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: DIM }}>{b.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, color: DIM, marginTop: 6 }}>Orders per run</div>
+              </div>
             </div>
           </div>
         );
@@ -1381,7 +1525,7 @@ export default function App() {
           <TabBar activeTab={activeTab} setActiveTab={setActiveTab} gapCount={allGapFlags.length} />
           <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} compact />
 
-          {activeTab === 'overview' && <OverviewTab allStats={allStats} allDates={allDates} pickerNames={pickerNames} allGapFlags={allGapFlags} />}
+          {activeTab === 'overview' && <OverviewTab allStats={allStats} allDates={allDates} pickerNames={pickerNames} allGapFlags={allGapFlags} pickerData={pickerData} />}
           {activeTab === 'weekly' && <WeeklyTab allStats={allStats} pickerNames={pickerNames} />}
           {activeTab === 'compare' && <CompareTab allStats={allStats} pickerNames={pickerNames} />}
           {activeTab === 'picker-detail' && <PickerDetailTab allStats={allStats} pickerNames={pickerNames} allDates={allDates} externalPicker={jumpPicker} pickerData={pickerData} />}
