@@ -8,10 +8,11 @@ import type { Order, PickerDayRaw } from './parseUtils';
 import { toDateStr } from './parseUtils';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const BG   = '#08080F';
+const BG   = '#060D1F';
 const BG2  = 'rgba(255,255,255,0.04)';
 const BG3  = 'rgba(255,255,255,0.07)';
-const AMBER  = '#FF9F0A';
+const BRAND  = '#E8192C';
+const AMBER  = '#38BDF8';
 const TEXT   = '#F5F5F7';
 const DIM    = 'rgba(255,255,255,0.38)';
 const BORDER = 'rgba(255,255,255,0.08)';
@@ -352,7 +353,7 @@ function Dropdown({ value, onChange, options }: { value: string; onChange: (v: s
             <div
               key={o}
               onClick={() => { onChange(o); setOpen(false); }}
-              style={{ padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: o === value ? AMBER : TEXT, background: o === value ? 'rgba(255,159,10,0.1)' : 'transparent', transition: 'background 0.1s', fontFamily: 'inherit' }}
+              style={{ padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: o === value ? AMBER : TEXT, background: o === value ? 'rgba(56,189,248,0.1)' : 'transparent', transition: 'background 0.1s', fontFamily: 'inherit' }}
               onMouseEnter={e => { if (o !== value) (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
               onMouseLeave={e => { if (o !== value) (e.target as HTMLElement).style.background = 'transparent'; }}
             >
@@ -477,10 +478,10 @@ function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(8,8,15,0.75)', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em', color: TEXT }}>
-          Pick<span style={{ color: AMBER }}> Track</span>
+          Pick<span style={{ color: BRAND }}> Track</span>
         </span>
         {dateRange && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,159,10,0.1)', border: '1px solid rgba(255,159,10,0.22)', borderRadius: 20, padding: '3px 12px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.22)', borderRadius: 20, padding: '3px 12px' }}>
             <span style={{ ...mono, fontSize: 12, color: AMBER }}>{fmtDate(dateRange.first)}</span>
             {dateRange.first !== dateRange.last && (
               <>
@@ -540,9 +541,9 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
         onDrop={handleDrop}
       >
         <input ref={inputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: 'none' }} onChange={e => e.target.files && onFiles(e.target.files)} />
-        <button onClick={() => inputRef.current?.click()} style={{ padding: '6px 18px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: AMBER, color: '#000', fontFamily: 'inherit' }}>+ Load File</button>
+        <button onClick={() => inputRef.current?.click()} style={{ padding: '6px 18px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: BRAND, color: '#fff', fontFamily: 'inherit' }}>+ Load File</button>
         <span style={{ fontSize: 11, color: DIM }}>Drop an xlsx anywhere to update data</span>
-        {isDragging && <span style={{ color: AMBER, fontSize: 11, ...mono }}>● Drop now</span>}
+        {isDragging && <span style={{ color: BRAND, fontSize: 11, ...mono }}>● Drop now</span>}
       </div>
     );
   }
@@ -550,7 +551,7 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '100px 24px', minHeight: '70vh' }}>
       <div
-        style={{ ...glass, border: `2px dashed ${isDragging ? AMBER : 'rgba(255,255,255,0.12)'}`, borderRadius: 24, padding: '60px 48px', textAlign: 'center', background: isDragging ? 'rgba(255,159,10,0.06)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'all 0.2s ease', maxWidth: 520, width: '100%' }}
+        style={{ ...glass, border: `2px dashed ${isDragging ? BRAND : 'rgba(255,255,255,0.12)'}`, borderRadius: 24, padding: '60px 48px', textAlign: 'center', background: isDragging ? 'rgba(232,25,44,0.06)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'all 0.2s ease', maxWidth: 520, width: '100%' }}
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
@@ -558,11 +559,11 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
       >
         <input ref={inputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: 'none' }} onChange={e => e.target.files && onFiles(e.target.files)} />
         <div style={{ fontSize: 44, marginBottom: 18, opacity: 0.9 }}>📊</div>
-        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 10, color: isDragging ? AMBER : TEXT, letterSpacing: '-0.01em' }}>Drop your Excel file here</div>
+        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 10, color: isDragging ? BRAND : TEXT, letterSpacing: '-0.01em' }}>Drop your Excel file here</div>
         <div style={{ fontSize: 13, color: DIM, marginBottom: 28, lineHeight: 1.7 }}>
           Date-named tabs (412026, 4102026…)<br />Wide format: Order · Lines · Time repeating per picker
         </div>
-        <button style={{ padding: '10px 28px', borderRadius: 22, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: AMBER, color: '#000', fontFamily: 'inherit', letterSpacing: '0.01em' }}>Browse File</button>
+        <button style={{ padding: '10px 28px', borderRadius: 22, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: BRAND, color: '#fff', fontFamily: 'inherit', letterSpacing: '0.01em' }}>Browse File</button>
       </div>
     </div>
   );
@@ -884,7 +885,7 @@ function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setA
         const active = activeTab === t.id;
         return (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
-            style={{ padding: '12px 16px', fontSize: 12, fontWeight: active ? 600 : 400, color: active ? TEXT : DIM, borderBottom: `2px solid ${active ? AMBER : 'transparent'}`, cursor: 'pointer', background: 'none', border: 'none', borderRadius: 0, outline: 'none', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s, border-color 0.15s', letterSpacing: '0.01em' }}>
+            style={{ padding: '12px 16px', fontSize: 12, fontWeight: active ? 600 : 400, color: active ? TEXT : DIM, borderBottom: `2px solid ${active ? BRAND : 'transparent'}`, cursor: 'pointer', background: 'none', border: 'none', borderRadius: 0, outline: 'none', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s, border-color 0.15s', letterSpacing: '0.01em' }}>
             {t.label}
             {t.id === 'gap-flags' && gapCount > 0 && (
               <span style={{ background: RED, color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 9, fontWeight: 700 }}>{gapCount}</span>
@@ -1051,7 +1052,7 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
                     Biggest batches: {top.name.split(' ')[0]} ({top.bs.avgOrders.toFixed(1)} orders/run)
                   </span>
                   {diff > 10 && (
-                    <span style={{ background: 'rgba(255,159,10,0.1)', color: AMBER, borderRadius: 20, padding: '3px 12px', fontSize: 11 }}>
+                    <span style={{ background: 'rgba(56,189,248,0.1)', color: AMBER, borderRadius: 20, padding: '3px 12px', fontSize: 11 }}>
                       {diff.toFixed(0)}% more per run than {bot.name.split(' ')[0]}
                     </span>
                   )}
@@ -1299,7 +1300,7 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
           const pct = (avg - overall) / overall * 100;
           if (pct >  10) return { background: 'rgba(48,209,88,0.14)',  color: GREEN };
           if (pct < -10) return { background: 'rgba(255,69,58,0.12)',  color: RED   };
-          return             { background: 'rgba(255,159,10,0.09)', color: AMBER  };
+          return             { background: 'rgba(56,189,248,0.09)', color: AMBER  };
         };
 
         return (
@@ -2240,7 +2241,7 @@ export default function App() {
 
       {parseStatus && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: 'rgba(18,18,28,0.96)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-          <div style={{ width: 18, height: 18, border: `2px solid ${AMBER}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+          <div style={{ width: 18, height: 18, border: `2px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
           <span style={{ fontSize: 13, color: TEXT }}>{parseStatus.label}</span>
         </div>
       )}
@@ -2249,7 +2250,7 @@ export default function App() {
         <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} />
       ) : !hasData && parseStatus ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 60px)', flexDirection: 'column', gap: 16 }}>
-          <div style={{ width: 40, height: 40, border: `3px solid ${AMBER}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ width: 40, height: 40, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           <div style={{ color: DIM, fontSize: 14 }}>{parseStatus.label}</div>
         </div>
       ) : (
