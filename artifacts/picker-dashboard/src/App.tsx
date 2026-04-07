@@ -627,19 +627,26 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags }: {
       {chartData.length > 0 && (
         <div style={{ ...section }}>
           <div style={secTitle}>Daily Lines by Picker</div>
-          <div style={{ ...card, padding: '16px 0 8px 0' }}>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartData} margin={{ left: 10, right: 20, top: 4, bottom: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+          <div style={{ ...card, padding: '16px 0 0 0' }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={chartData} margin={{ left: 10, right: 20, top: 4, bottom: 46 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis tick={{ fill: DIM, fontSize: 10 }} />
+                <YAxis tick={{ fill: DIM, fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<DarkTip />} />
-                <Legend wrapperStyle={{ color: DIM, fontSize: 11, paddingTop: 6 }} />
                 {pickerNames.map((name, i) => (
                   <Bar key={name} dataKey={name} stackId="a" fill={PICKER_COLORS[i % PICKER_COLORS.length]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', padding: '10px 20px 14px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              {pickerNames.map((name, i) => (
+                <span key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: PICKER_COLORS[i % PICKER_COLORS.length], flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: DIM }}>{name.split(' ')[0]}</span>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       )}
