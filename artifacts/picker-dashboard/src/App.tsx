@@ -194,6 +194,118 @@ function pickerBatchStats(pickerDays: PickerDayData[]) {
   return { batches: allBatches, avgOrders, avgLines, maxBatch, totalRuns: allBatches.length };
 }
 
+// ─── PERFORMANCE SCORE ENGINE ────────────────────────────────────────────────
+interface KpiResult { pts: number; max: number; rawValue: string; label: string; }
+interface PickerScore {
+  total: number; band: string; bandColor: string;
+  pickRate: KpiResult; consistency: KpiResult; uptime: KpiResult;
+  batchEff: KpiResult; trend: KpiResult;
+}
+function computePickerScore(
+  picker: string,
+  allStats: DayStats[],
+  allGapFlags: GapFlag[],
+  pickerData: Record<string, PickerDayData>,
+): PickerScore {
+  const days     = allStats.filter(s => s.pickerName === picker);
+  const lphDays  = days.filter(d => d.linesPerHour != null);
+
+  // 1. Pick Rate (max 35 pts) ─────────────────────────────────────────────────
+  const pickerAvgLph = lphDays.length
+    ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+  const teamLphs     = allStats.filter(s => s.linesPerHour != null);
+  const teamAvgLph   = teamLphs.length
+    ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
+  const ratio        = teamAvgLph > 0 ? pickerAvgLph / teamAvgLph : 0;
+  // 100 % of team ≈ 25 pts; 120 %+ → 35 pts; scales linearly; floor 5
+  const pickRatePts  = Math.round(Math.max(5, Math.min(35, ratio * 29.2)));
+
+  // 2. Consistency (max 25 pts) ───────────────────────────────────────────────
+  let consistencyPts = 12;
+  let cvLabel        = 'Insufficient data (need ≥3 days)';
+  if (lphDays.length >= 3) {
+    const mean     = pickerAvgLph;
+    const variance = lphDays.reduce((s, d) => s + Math.pow(d.linesPerHour! - mean, 2), 0) / lphDays.length;
+    const cv       = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : 100;
+    cvLabel        = `${cv.toFixed(0)}% day-to-day variation`;
+    if      (cv < 10) consistencyPts = 25;
+    else if (cv < 15) consistencyPts = 20;
+    else if (cv < 25) consistencyPts = 15;
+    else if (cv < 35) consistencyPts = 8;
+    else              consistencyPts = 3;
+  }
+
+  // 3. Uptime (max 20 pts) ────────────────────────────────────────────────────
+  const pickerFlags    = allGapFlags.filter(f => f.pickerName === picker);
+  const daysWorked     = Math.max(1, days.length);
+  const penaltyByDay: Record<string, number> = {};
+  for (const f of pickerFlags) {
+    const p = f.severity === 'High' ? 15 : f.severity === 'Med' ? 9 : 4;
+    penaltyByDay[f.dateStr] = (penaltyByDay[f.dateStr] || 0) + p;
+  }
+  const totalPenalty = Object.values(penaltyByDay).reduce((s, v) => s + Math.min(v, 20), 0);
+  const uptimePts    = Math.round(Math.max(0, 20 - totalPenalty / daysWorked));
+  const flagLabel    = pickerFlags.length === 0
+    ? 'No flags'
+    : `${pickerFlags.length} flag${pickerFlags.length > 1 ? 's' : ''} across ${Object.keys(penaltyByDay).length} day(s)`;
+
+  // 4. Batch Efficiency (max 10 pts) ──────────────────────────────────────────
+  const pickerDays = Object.values(pickerData).filter(d => d.pickerName === picker);
+  const allBatches = pickerDays.flatMap(d => computeBatches(d.orders));
+  let batchPts     = 5;
+  let batchLabel   = 'Insufficient run data (need ≥5)';
+  if (allBatches.length >= 5) {
+    const avg  = allBatches.reduce((s, b) => s + b.orderCount, 0) / allBatches.length;
+    batchLabel = `${avg.toFixed(1)} avg orders per run`;
+    if      (avg >= 4) batchPts = 10;
+    else if (avg >= 3) batchPts = 8;
+    else if (avg >= 2) batchPts = 5;
+    else               batchPts = 2;
+  }
+
+  // 5. Trend (max 10 pts) ─────────────────────────────────────────────────────
+  const sorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+  let trendPts   = 6;
+  let trendLabel = 'Flat';
+  const calcPct  = (early: typeof sorted, late: typeof sorted) => {
+    if (!early.length || !late.length) return null;
+    const ea = early.reduce((s, d) => s + d.linesPerHour!, 0) / early.length;
+    const la = late.reduce((s, d)  => s + d.linesPerHour!, 0) / late.length;
+    return ea > 0 ? ((la - ea) / ea) * 100 : 0;
+  };
+  const applyPct = (pct: number) => {
+    if      (pct >   5) { trendPts = 10; trendLabel = `Improving +${pct.toFixed(0)}%`; }
+    else if (pct >  -5) { trendPts =  6; trendLabel = `Flat (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%)`; }
+    else if (pct > -15) { trendPts =  3; trendLabel = `Declining ${pct.toFixed(0)}%`; }
+    else                { trendPts =  0; trendLabel = `Declining ${pct.toFixed(0)}%`; }
+  };
+  if (sorted.length >= 6) {
+    const prior = sorted.slice(-10, -5);
+    const pct   = calcPct(prior.length >= 1 ? prior : sorted.slice(0, Math.floor(sorted.length / 2)), sorted.slice(-5));
+    if (pct !== null) applyPct(pct);
+  } else if (sorted.length >= 3) {
+    const half = Math.floor(sorted.length / 2);
+    const pct  = calcPct(sorted.slice(0, half), sorted.slice(half));
+    if (pct !== null) applyPct(pct);
+  }
+
+  const total = pickRatePts + consistencyPts + uptimePts + batchPts + trendPts;
+  let band = 'Needs Focus', bandColor = RED;
+  if      (total >= 85) { band = 'Elite';      bandColor = '#00E5FF'; }
+  else if (total >= 70) { band = 'Strong';     bandColor = GREEN; }
+  else if (total >= 55) { band = 'Solid';      bandColor = AMBER; }
+  else if (total >= 40) { band = 'Developing'; bandColor = YELLOW; }
+
+  return {
+    total, band, bandColor,
+    pickRate:    { pts: pickRatePts,    max: 35, rawValue: pickerAvgLph > 0 ? `${pickerAvgLph.toFixed(1)} L/Hr` : 'No timing data', label: 'Pick Rate' },
+    consistency: { pts: consistencyPts, max: 25, rawValue: cvLabel,      label: 'Consistency' },
+    uptime:      { pts: uptimePts,      max: 20, rawValue: flagLabel,     label: 'Uptime' },
+    batchEff:    { pts: batchPts,       max: 10, rawValue: batchLabel,    label: 'Batch Efficiency' },
+    trend:       { pts: trendPts,       max: 10, rawValue: trendLabel,    label: 'Trend (recent vs prior)' },
+  };
+}
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const mono: React.CSSProperties = { fontFamily: "'SF Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, monospace" };
 const glass: React.CSSProperties = {
@@ -456,13 +568,292 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
   );
 }
 
+// ─── SCORE TAB ────────────────────────────────────────────────────────────────
+const KPI_META = [
+  {
+    key: 'pickRate' as const, color: AMBER, max: 35,
+    what: 'Your rolling average Lines per Hour (L/Hr) compared to the team average. This is the core measure of raw productivity.',
+    rows: [
+      ['≥ 120% of team avg', '35 pts'],
+      ['100% of team avg',   '~25 pts'],
+      ['80% of team avg',    '~15 pts'],
+      ['< 60% of team avg',  '5 pts (floor)'],
+    ],
+    note: 'Score scales smoothly between thresholds — never falls below 5 pts so everyone gets credit for working.',
+  },
+  {
+    key: 'consistency' as const, color: GREEN, max: 25,
+    what: 'How steady your output is day to day, measured by Coefficient of Variation (CV) — your standard deviation divided by your mean L/Hr, as a percentage. Lower CV = more reliable output.',
+    rows: [
+      ['CV < 10%  — rock solid',    '25 pts'],
+      ['CV 10–15%',                 '20 pts'],
+      ['CV 15–25%',                 '15 pts'],
+      ['CV 25–35%',                 '8 pts'],
+      ['CV > 35%  — very erratic',  '3 pts'],
+    ],
+    note: 'Requires ≥3 days of timing data. Earns 12 pts (midpoint) until enough data is available.',
+  },
+  {
+    key: 'uptime' as const, color: '#32D2F2', max: 20,
+    what: 'How much of your shift you spend actively picking, measured by unexplained gap flags — periods between two consecutive runs longer than expected with no recorded picks.',
+    rows: [
+      ['No flags',                          '20 pts'],
+      ['Low flag (60–89 min gap)',           '−4 pts per flag-day'],
+      ['Med flag (90–119 min gap)',          '−9 pts per flag-day'],
+      ['High flag (120+ min gap)',           '−15 pts per flag-day'],
+    ],
+    note: 'Penalties are averaged across all days worked, so occasional flags matter less the more days you have on record.',
+  },
+  {
+    key: 'batchEff' as const, color: '#BF5AF2', max: 10,
+    what: 'Average number of orders you grab per run to staging. More orders per trip = fewer trips for the same work = smarter use of shift time.',
+    rows: [
+      ['≥ 4.0 orders per run', '10 pts'],
+      ['3.0–3.9',              '8 pts'],
+      ['2.0–2.9',              '5 pts'],
+      ['< 2.0',                '2 pts'],
+    ],
+    note: 'Requires ≥5 completed runs to calculate. Earns 5 pts (midpoint) until enough run data is available.',
+  },
+  {
+    key: 'trend' as const, color: YELLOW, max: 10,
+    what: 'Whether your L/Hr is improving or declining recently. Compares your last 5 days against the 5 days before that. If fewer than 10 days are available, the data is split in half.',
+    rows: [
+      ['Improving > +5%',   '10 pts'],
+      ['Flat (±5%)',         '6 pts'],
+      ['Declining 5–15%',   '3 pts'],
+      ['Declining > 15%',   '0 pts'],
+    ],
+    note: 'Requires ≥3 days of timing data. Defaults to 6 pts (flat) when not enough data is available.',
+  },
+] as const;
+
+const SCORE_BANDS = [
+  { range: '85–100', label: 'Elite',       color: '#00E5FF' },
+  { range: '70–84',  label: 'Strong',      color: GREEN },
+  { range: '55–69',  label: 'Solid',       color: AMBER },
+  { range: '40–54',  label: 'Developing',  color: YELLOW },
+  { range: '0–39',   label: 'Needs Focus', color: RED },
+];
+
+function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
+  allStats: DayStats[]; allGapFlags: GapFlag[];
+  pickerNames: string[]; pickerData: Record<string, PickerDayData>;
+}) {
+  const [sel, setSel]         = useState(pickerNames[0] || '');
+  const [showHow, setShowHow] = useState(false);
+
+  useEffect(() => {
+    if (pickerNames.length > 0 && !pickerNames.includes(sel)) setSel(pickerNames[0]);
+  }, [pickerNames]);
+
+  const scores = useMemo(() =>
+    pickerNames
+      .map(p => ({ name: p, score: computePickerScore(p, allStats, allGapFlags, pickerData) }))
+      .sort((a, b) => b.score.total - a.score.total),
+    [pickerNames, allStats, allGapFlags, pickerData],
+  );
+
+  const selScore = useMemo(() =>
+    computePickerScore(sel, allStats, allGapFlags, pickerData),
+    [sel, allStats, allGapFlags, pickerData],
+  );
+
+  const rank = scores.findIndex(s => s.name === sel) + 1;
+
+  if (!pickerNames.length) {
+    return <div style={{ padding: 60, textAlign: 'center', color: DIM }}>No data loaded.</div>;
+  }
+
+  const kpiOrder: (keyof Omit<PickerScore, 'total' | 'band' | 'bandColor'>)[] =
+    ['pickRate', 'consistency', 'uptime', 'batchEff', 'trend'];
+
+  return (
+    <div style={{ padding: '28px 28px', maxWidth: 920, margin: '0 auto' }}>
+
+      {/* ── Team Leaderboard ─────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={secTitle}>Team Leaderboard</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+          {scores.map((s, i) => (
+            <button key={s.name} onClick={() => setSel(s.name)}
+              style={{
+                ...glass, padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
+                fontFamily: 'inherit', borderRadius: 14, transition: 'all 0.15s',
+                border: s.name === sel
+                  ? `1px solid ${s.score.bandColor}`
+                  : '1px solid rgba(255,255,255,0.09)',
+                background: s.name === sel
+                  ? `${s.score.bandColor}1A`
+                  : 'rgba(255,255,255,0.04)',
+              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 10, color: DIM }}>#{i + 1}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: s.score.bandColor, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{s.score.band}</span>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: TEXT, marginBottom: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: s.score.bandColor, ...mono, lineHeight: 1 }}>{s.score.total}</div>
+              <div style={{ fontSize: 9, color: DIM, marginTop: 2 }}>/ 100</div>
+              <div style={{ marginTop: 10, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 2 }}>
+                <div style={{ height: '100%', width: `${s.score.total}%`, background: s.score.bandColor, borderRadius: 2, transition: 'width 0.5s' }} />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Individual Score Card ────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={secTitle}>Score Breakdown</div>
+          <Dropdown value={sel} onChange={setSel} options={pickerNames} />
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: DIM }}>
+            Ranked <span style={{ color: TEXT, fontWeight: 600 }}>#{rank}</span> of {scores.length}
+          </div>
+        </div>
+
+        <div style={{ ...card, padding: 28 }}>
+
+          {/* Score ring + name/band */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28, marginBottom: 28, flexWrap: 'wrap' }}>
+            {(() => {
+              const r = 51, circ = 2 * Math.PI * r;
+              const fill = (selScore.total / 100) * circ;
+              return (
+                <div style={{ position: 'relative', width: 120, height: 120, flexShrink: 0 }}>
+                  <svg width={120} height={120} style={{ transform: 'rotate(-90deg)' }}>
+                    <circle cx={60} cy={60} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={10} />
+                    <circle cx={60} cy={60} r={r} fill="none" stroke={selScore.bandColor} strokeWidth={10}
+                      strokeDasharray={`${fill} ${circ - fill}`} strokeLinecap="round" />
+                  </svg>
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ fontSize: 34, fontWeight: 700, color: selScore.bandColor, ...mono, lineHeight: 1 }}>{selScore.total}</div>
+                    <div style={{ fontSize: 10, color: DIM }}>/ 100</div>
+                  </div>
+                </div>
+              );
+            })()}
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: TEXT, marginBottom: 8 }}>{sel}</div>
+              <div style={{ display: 'inline-block', padding: '4px 14px', borderRadius: 20, background: `${selScore.bandColor}22`, border: `1px solid ${selScore.bandColor}55`, fontSize: 12, fontWeight: 700, color: selScore.bandColor, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {selScore.band}
+              </div>
+              <div style={{ fontSize: 11, color: DIM, marginTop: 10 }}>
+                Ranked #{rank} of {scores.length} · Based on {allStats.filter(s => s.pickerName === sel).length} days of data
+              </div>
+            </div>
+          </div>
+
+          {/* KPI rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {kpiOrder.map((key, i) => {
+              const kpi   = selScore[key] as KpiResult;
+              const meta  = KPI_META[i];
+              const pct   = (kpi.pts / kpi.max) * 100;
+              const col   = meta.color;
+              const isLast = i === kpiOrder.length - 1;
+              return (
+                <div key={key} style={{ display: 'grid', gridTemplateColumns: '1fr auto 90px', alignItems: 'center', gap: 16, padding: '16px 0', borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.04)' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: col }}>{kpi.label}</div>
+                    <div style={{ fontSize: 11, color: DIM, marginTop: 3 }}>{kpi.rawValue}</div>
+                    <div style={{ marginTop: 8, height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 3, maxWidth: 320 }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: col, borderRadius: 3, transition: 'width 0.5s ease' }} />
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 22, fontWeight: 700, color: col, ...mono }}>{kpi.pts}</span>
+                    <span style={{ fontSize: 11, color: DIM }}> / {kpi.max} pts</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Total */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Total Score</div>
+            <div>
+              <span style={{ fontSize: 28, fontWeight: 700, color: selScore.bandColor, ...mono }}>{selScore.total}</span>
+              <span style={{ fontSize: 13, color: DIM }}> / 100</span>
+            </div>
+          </div>
+
+          {/* ── How is this score calculated? ──────────────────────────────────── */}
+          <div style={{ marginTop: 22, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 18 }}>
+            <button onClick={() => setShowHow(h => !h)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, padding: 0, color: DIM, letterSpacing: '0.03em' }}>
+              <span style={{ fontSize: 11, display: 'inline-block', transition: 'transform 0.2s', transform: showHow ? 'rotate(90deg)' : 'none' }}>▶</span>
+              How is this score calculated?
+            </button>
+
+            {showHow && (
+              <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Intro */}
+                <div style={{ fontSize: 12, color: DIM, lineHeight: 1.75, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '14px 16px' }}>
+                  The score is built from <strong style={{ color: TEXT }}>5 independent KPIs</strong> that together measure every important dimension of picking performance.
+                  Each KPI contributes a fixed number of points. Your score is simply the sum — no hidden weighting, no black box.
+                  The breakdown above tells you exactly where to focus to improve.
+                </div>
+
+                {/* One card per KPI */}
+                {KPI_META.map(meta => (
+                  <div key={meta.key} style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${meta.color}33`, borderRadius: 12, padding: '18px 20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: meta.color }}>{selScore[meta.key].label}</div>
+                      <div style={{ fontSize: 10, color: DIM, ...mono }}>max {meta.max} pts</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.75, marginBottom: 14 }}>{meta.what}</div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...th, padding: '6px 0', fontSize: 9 }}>Condition</th>
+                          <th style={{ ...th, padding: '6px 0', fontSize: 9, textAlign: 'right' }}>Points</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {meta.rows.map(([cond, pts]) => (
+                          <tr key={cond}>
+                            <td style={{ ...td, fontSize: 11, color: DIM, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>{cond}</td>
+                            <td style={{ ...td, fontSize: 11, fontWeight: 700, color: meta.color, padding: '6px 0', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.03)', ...mono }}>{pts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{ fontSize: 10, color: DIM, lineHeight: 1.65, fontStyle: 'italic' }}>{meta.note}</div>
+                  </div>
+                ))}
+
+                {/* Score bands */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '18px 20px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Score Bands</div>
+                  {SCORE_BANDS.map(b => (
+                    <div key={b.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <span style={{ fontSize: 12, color: DIM, ...mono }}>{b.range}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: b.color }}>{b.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
 // ─── TAB BAR ─────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'weekly', label: 'Weekly' },
-  { id: 'compare', label: 'Compare' },
+  { id: 'overview',      label: 'Overview' },
+  { id: 'score',         label: 'Score' },
+  { id: 'weekly',        label: 'Weekly' },
+  { id: 'compare',       label: 'Compare' },
   { id: 'picker-detail', label: 'Picker Detail' },
-  { id: 'gap-flags', label: 'Gap Flags' },
+  { id: 'gap-flags',     label: 'Gap Flags' },
 ];
 function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setActiveTab: (t: string) => void; gapCount: number }) {
   return (
@@ -1469,11 +1860,12 @@ export default function App() {
           <TabBar activeTab={activeTab} setActiveTab={setActiveTab} gapCount={allGapFlags.length} />
           <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} compact />
 
-          {activeTab === 'overview' && <OverviewTab allStats={allStats} allDates={allDates} pickerNames={pickerNames} allGapFlags={allGapFlags} pickerData={pickerData} />}
-          {activeTab === 'weekly' && <WeeklyTab allStats={allStats} pickerNames={pickerNames} />}
-          {activeTab === 'compare' && <CompareTab allStats={allStats} pickerNames={pickerNames} />}
+          {activeTab === 'overview'      && <OverviewTab allStats={allStats} allDates={allDates} pickerNames={pickerNames} allGapFlags={allGapFlags} pickerData={pickerData} />}
+          {activeTab === 'score'         && <ScoreTab allStats={allStats} allGapFlags={allGapFlags} pickerNames={pickerNames} pickerData={pickerData} />}
+          {activeTab === 'weekly'        && <WeeklyTab allStats={allStats} pickerNames={pickerNames} />}
+          {activeTab === 'compare'       && <CompareTab allStats={allStats} pickerNames={pickerNames} />}
           {activeTab === 'picker-detail' && <PickerDetailTab allStats={allStats} pickerNames={pickerNames} allDates={allDates} externalPicker={jumpPicker} pickerData={pickerData} />}
-          {activeTab === 'gap-flags' && <GapFlagsTab allGapFlags={allGapFlags} setActiveTab={setActiveTab} onPickerJump={setJumpPicker} pickerData={pickerData} />}
+          {activeTab === 'gap-flags'     && <GapFlagsTab allGapFlags={allGapFlags} setActiveTab={setActiveTab} onPickerJump={setJumpPicker} pickerData={pickerData} />}
         </>
       )}
     </div>
