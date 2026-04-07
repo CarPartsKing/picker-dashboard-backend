@@ -437,7 +437,6 @@ function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
         <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em', color: TEXT }}>
           Pick<span style={{ color: AMBER }}> Track</span>
         </span>
-        <span style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '3px 10px', fontSize: 10, color: DIM, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Automotive</span>
         {dateRange && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,159,10,0.1)', border: '1px solid rgba(255,159,10,0.22)', borderRadius: 20, padding: '3px 12px' }}>
             <span style={{ ...mono, fontSize: 12, color: AMBER }}>{fmtDate(dateRange.first)}</span>
