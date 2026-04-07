@@ -1387,13 +1387,20 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
     return lphs.length ? lphs.reduce((s, d) => s + d.linesPerHour!, 0) / lphs.length : 0;
   }, [allStats]);
 
+  const teamAvgLpo = useMemo(() => {
+    const tl = allStats.reduce((s, d) => s + d.totalLines, 0);
+    const to = allStats.reduce((s, d) => s + d.totalOrders, 0);
+    return to > 0 ? tl / to : 0;
+  }, [allStats]);
+
   const days = useMemo(() => allStats.filter(s => s.pickerName === sel), [allStats, sel]);
   const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
   const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
   const lphDays = days.filter(s => s.linesPerHour != null);
   const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
   const avgLpo = totalOrders > 0 ? totalLines / totalOrders : 0;
-  const vsTeam = teamAvgLph > 0 ? ((avgLph - teamAvgLph) / teamAvgLph) * 100 : 0;
+  const vsTeam  = teamAvgLph > 0 ? ((avgLph  - teamAvgLph)  / teamAvgLph)  * 100 : 0;
+  const vsTeamLpo = teamAvgLpo > 0 ? ((avgLpo - teamAvgLpo) / teamAvgLpo) * 100 : 0;
 
   // ── Batch clustering ─────────────────────────────────────────────────────────
   const pickerDays = useMemo(() => Object.values(pickerData).filter(d => d.pickerName === sel), [pickerData, sel]);
@@ -1436,11 +1443,15 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
     else              { consistencyValue = 'Low';  consistencyColor = RED;    }
   }
 
-  const trendData = allDates.map(d => ({
-    date: fmtDate(d),
-    lines: days.find(s => s.dateStr === d)?.totalLines ?? null,
-    lph: days.find(s => s.dateStr === d)?.linesPerHour ?? null,
-  }));
+  const trendData = allDates.map(d => {
+    const day = days.find(s => s.dateStr === d);
+    return {
+      date: fmtDate(d),
+      lines: day?.totalLines ?? null,
+      lph:   day?.linesPerHour ?? null,
+      lpo:   day && day.totalOrders > 0 ? +(day.totalLines / day.totalOrders).toFixed(2) : null,
+    };
+  });
 
   const sortedDays = [...days].sort((a, b) => b.dateStr.localeCompare(a.dateStr));
   const pickerGaps = days.flatMap(s => s.gapFlags).sort((a, b) => b.gapMinutes - a.gapMinutes);
@@ -1465,6 +1476,61 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         </div>
       </div>
 
+      {/* ── Rate in Context ──────────────────────────────────────────────────── */}
+      {avgLpo > 0 && teamAvgLpo > 0 && (() => {
+        const aboveRate       = vsTeam    >  5;
+        const belowRate       = vsTeam    < -5;
+        const aboveComplexity = vsTeamLpo >  15;
+        const belowComplexity = vsTeamLpo < -15;
+        let insight = '';
+        let insightColor = DIM;
+        if (aboveRate && aboveComplexity) {
+          insight = `Exceptional — delivering an above-average pick rate while handling orders ${vsTeamLpo.toFixed(0)}% more complex than the team average. These two facts together indicate genuinely high performance.`;
+          insightColor = GREEN;
+        } else if (aboveRate && belowComplexity) {
+          insight = `Strong rate, but orders are ${Math.abs(vsTeamLpo).toFixed(0)}% less complex than the team average. The rate likely benefits from simpler order types — worth factoring in when comparing to other pickers.`;
+          insightColor = YELLOW;
+        } else if (belowRate && aboveComplexity) {
+          insight = `Order complexity is ${vsTeamLpo.toFixed(0)}% above the team average. Their lower L/Hr is partly explained by heavier orders — complex orders take more time per line. This is not the same as a pace problem.`;
+          insightColor = AMBER;
+        } else if (belowRate && belowComplexity) {
+          insight = `Both pick rate and order complexity are below the team average. Complexity does not explain the gap — the focus should be on picking pace.`;
+          insightColor = RED;
+        } else {
+          insight = `Both pick rate and order complexity are close to the team average. No significant complexity gap to account for.`;
+          insightColor = DIM;
+        }
+        const metricRow = (label: string, pickerVal: string, teamVal: string, delta: number, color: string) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 10, color: DIM, width: 110, flexShrink: 0, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{label}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color, ...mono, marginRight: 10 }}>{pickerVal}</div>
+            <div style={{ fontSize: 11, color: DIM }}>
+              team avg <span style={{ color: TEXT, ...mono }}>{teamVal}</span>
+            </div>
+            <div style={{ marginLeft: 12, padding: '2px 10px', borderRadius: 20, background: `${color}18`, border: `1px solid ${color}44`, fontSize: 10, fontWeight: 700, color, ...mono }}>
+              {delta >= 0 ? '+' : ''}{delta.toFixed(0)}%
+            </div>
+          </div>
+        );
+        const rateColor      = aboveRate      ? GREEN : belowRate      ? RED : TEXT;
+        const complexityColor = aboveComplexity ? AMBER : belowComplexity ? '#32D2F2' : TEXT;
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Rate in Context</div>
+            <div style={{ ...card, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {metricRow('Lines / Hr', avgLph > 0 ? avgLph.toFixed(1) : '—', teamAvgLph.toFixed(1), vsTeam, rateColor)}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.05)' }} />
+              {metricRow('Lines / Order', avgLpo.toFixed(1), teamAvgLpo.toFixed(1), vsTeamLpo, complexityColor)}
+              {insight && (
+                <div style={{ marginTop: 4, padding: '12px 16px', borderRadius: 10, background: `${insightColor}10`, borderLeft: `3px solid ${insightColor}`, fontSize: 12, color: TEXT, lineHeight: 1.7 }}>
+                  {insight}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {(() => {
         const strengths: string[] = [];
         const focus: string[] = [];
@@ -1478,8 +1544,10 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         else if (trendValue.startsWith('↓')) focus.push(`Declining trend — ${trendValue.replace('↓ ', '')} ${trendSub}`);
         if (pickerGaps.length === 0 && days.length >= 3) strengths.push(`No gap flags across ${days.length} days`);
         else if (pickerGaps.length > 0) focus.push(`${pickerGaps.length} gap flag${pickerGaps.length > 1 ? 's' : ''} recorded — check raw orders`);
-        if (avgLpo >= 3.0) strengths.push(`High lines per order (${avgLpo.toFixed(1)} L/Ord)`);
-        else if (avgLpo > 0 && avgLpo < 2.0) focus.push(`Low lines per order (${avgLpo.toFixed(1)}) — may indicate simpler order types`);
+        if (avgLpo > 0 && teamAvgLpo > 0) {
+          if (vsTeamLpo >= 20) strengths.push(`Handles orders ${vsTeamLpo.toFixed(0)}% more complex than the team average (${avgLpo.toFixed(1)} vs ${teamAvgLpo.toFixed(1)} lines/order) — their L/Hr should be read in that context`);
+          else if (vsTeamLpo <= -20) focus.push(`Order complexity is ${Math.abs(vsTeamLpo).toFixed(0)}% below the team average (${avgLpo.toFixed(1)} vs ${teamAvgLpo.toFixed(1)} lines/order) — rate comparisons are more direct`);
+        }
         if (strengths.length === 0 && focus.length === 0) return null;
         const col = (items: string[], color: string, label: string) => (
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1572,14 +1640,22 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           </ResponsiveContainer>
         </div>
         <div style={{ ...card, padding: '14px 0 8px 0' }}>
-          <div style={{ padding: '0 16px 6px', fontSize: 11, fontWeight: 700, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Lines / Hr</div>
+          <div style={{ padding: '0 16px 6px', display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Lines / Hr</span>
+            <span style={{ fontSize: 9, color: DIM }}>
+              <span style={{ display: 'inline-block', width: 18, height: 2, background: GREEN, verticalAlign: 'middle', marginRight: 4 }} />L/Hr
+              <span style={{ display: 'inline-block', width: 18, height: 2, background: AMBER, verticalAlign: 'middle', marginLeft: 10, marginRight: 4, borderTop: '2px dashed ' + AMBER }} />L/Order
+            </span>
+          </div>
           <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={trendData.filter(d => d.lph != null)} margin={{ left: 10, right: 12, top: 4, bottom: 40 }}>
+            <LineChart data={trendData.filter(d => d.lph != null || d.lpo != null)} margin={{ left: 10, right: 28, top: 4, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
               <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
-              <YAxis tick={{ fill: DIM, fontSize: 9 }} />
+              <YAxis yAxisId="left"  tick={{ fill: DIM, fontSize: 9 }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fill: AMBER, fontSize: 9 }} />
               <Tooltip content={<DarkTip />} />
-              <Line type="monotone" dataKey="lph" stroke={GREEN} strokeWidth={2} dot={{ fill: GREEN, r: 3 }} name="L/Hr" />
+              <Line yAxisId="left"  type="monotone" dataKey="lph" stroke={GREEN} strokeWidth={2} dot={{ fill: GREEN, r: 3 }} name="L/Hr" connectNulls />
+              <Line yAxisId="right" type="monotone" dataKey="lpo" stroke={AMBER} strokeWidth={1.5} strokeDasharray="5 3" dot={{ fill: AMBER, r: 2 }} name="L/Order" connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
