@@ -875,10 +875,15 @@ function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setA
 }
 
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+function StatCard({ label, value, sub, color, onInfo }: { label: string; value: string | number; sub?: string; color?: string; onInfo?: () => void }) {
   return (
     <div style={{ ...card, padding: '16px 20px' }}>
-      <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.13em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 500 }}>{label}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <div style={{ fontSize: 9, color: DIM, letterSpacing: '0.13em', textTransform: 'uppercase', fontWeight: 500 }}>{label}</div>
+        {onInfo && (
+          <button onClick={onInfo} title="What is this?" style={{ background: 'none', border: 'none', cursor: 'pointer', color: DIM, fontSize: 13, padding: 0, lineHeight: 1, fontFamily: 'inherit', flexShrink: 0 }}>ⓘ</button>
+        )}
+      </div>
       <div style={{ fontSize: 26, fontWeight: 600, color: color || AMBER, ...mono, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: DIM, marginTop: 6, letterSpacing: '0.02em' }}>{sub}</div>}
     </div>
@@ -1451,7 +1456,8 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   pickerData: Record<string, PickerDayData>;
 }) {
   const [sel, setSel] = useState(externalPicker || pickerNames[0] || '');
-  const [expandedGapKey, setExpandedGapKey] = useState<string | null>(null);
+  const [expandedGapKey, setExpandedGapKey]         = useState<string | null>(null);
+  const [showConsistencyInfo, setShowConsistencyInfo] = useState(false);
   useEffect(() => {
     if (externalPicker && pickerNames.includes(externalPicker)) setSel(externalPicker);
     else if (pickerNames.length > 0 && !pickerNames.includes(sel)) setSel(pickerNames[0]);
@@ -1547,9 +1553,57 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           <StatCard label="Days Worked" value={days.length} color={TEXT} />
           <StatCard label="vs Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
           <StatCard label="Trend" value={trendValue} sub={trendSub || undefined} color={trendColor} />
-          <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor} />
+          <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor}
+            onInfo={() => setShowConsistencyInfo(s => !s)} />
         </div>
       </div>
+
+      {showConsistencyInfo && (
+        <div style={{ ...card, padding: '20px 24px', marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>What is Consistency?</div>
+            <button onClick={() => setShowConsistencyInfo(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: DIM, fontSize: 16, padding: 0, lineHeight: 1, fontFamily: 'inherit' }}>✕</button>
+          </div>
+          <div style={{ fontSize: 12, color: DIM, lineHeight: 1.8, marginBottom: 14 }}>
+            Consistency measures how steady a picker's <strong style={{ color: TEXT }}>Lines per Hour (L/Hr)</strong> is from one
+            day to the next. It uses a metric called the{' '}
+            <strong style={{ color: TEXT }}>Coefficient of Variation (CV)</strong> — the standard deviation of all daily
+            L/Hr values divided by the mean, expressed as a percentage.
+          </div>
+          <div style={{ fontSize: 12, color: DIM, lineHeight: 1.8, marginBottom: 16 }}>
+            A low CV means the picker delivers a similar pace every day — predictable and reliable.
+            A high CV means their output swings significantly — some days fast, others much slower — making
+            it harder to plan workload or spot genuine issues.
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, padding: '6px 0', fontSize: 9 }}>CV</th>
+                <th style={{ ...th, padding: '6px 0', fontSize: 9 }}>Rating</th>
+                <th style={{ ...th, padding: '6px 0', fontSize: 9 }}>What it means</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['Under 15%', 'High',  GREEN,  'Reliable — output is predictable day to day'],
+                ['15 – 30%',  'Med',   YELLOW, 'Moderate swings — some variability across days'],
+                ['Over 30%',  'Low',   RED,    'Significant variation — pace changes substantially'],
+              ] as const).map(([range, rating, color, desc]) => (
+                <tr key={range}>
+                  <td style={{ ...td, ...mono, fontSize: 11, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>{range}</td>
+                  <td style={{ ...td, fontSize: 11, fontWeight: 700, color, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>{rating}</td>
+                  <td style={{ ...td, fontSize: 11, color: DIM, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize: 10, color: DIM, lineHeight: 1.65, fontStyle: 'italic' }}>
+            Requires at least 2 days of timing data. The subtitle on the card (e.g. "CV 18% · 12d") shows the
+            exact figure and how many days it is calculated from.
+          </div>
+        </div>
+      )}
 
       {/* ── Rate in Context ──────────────────────────────────────────────────── */}
       {avgLpo > 0 && teamAvgLpo > 0 && (() => {
