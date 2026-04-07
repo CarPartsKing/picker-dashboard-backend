@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import {
   BarChart, Bar, LineChart, Line, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import type { Order, PickerDayRaw } from './parseUtils';
 import { toDateStr } from './parseUtils';
@@ -1216,6 +1216,81 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
         </div>
       )}
 
+      {/* ── Picker × Day Heatmap ─────────────────────────────────────────────── */}
+      {pickerNames.length > 0 && (() => {
+        const DN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const DO = [1,2,3,4,5,6,0];
+        const activeDows = DO.filter(d =>
+          allStats.some(s => new Date(s.dateStr + 'T12:00:00').getDay() === d && s.linesPerHour != null)
+        );
+        if (activeDows.length < 2) return null;
+
+        const matrix = pickerNames.map(name => {
+          const ps = allStats.filter(s => s.pickerName === name && s.linesPerHour != null);
+          const overall = ps.length ? ps.reduce((s, d) => s + d.linesPerHour!, 0) / ps.length : 0;
+          const dowAvgs = new Map<number, { avg: number; count: number }>();
+          for (const dow of activeDows) {
+            const ds = ps.filter(s => new Date(s.dateStr + 'T12:00:00').getDay() === dow);
+            if (ds.length) dowAvgs.set(dow, { avg: ds.reduce((s, d) => s + d.linesPerHour!, 0) / ds.length, count: ds.length });
+          }
+          const entries = [...dowAvgs.entries()];
+          const best  = entries.length ? entries.reduce((a, b) => b[1].avg > a[1].avg ? b : a)[0] : null;
+          const worst = entries.length > 1 ? entries.reduce((a, b) => b[1].avg < a[1].avg ? b : a)[0] : null;
+          return { name, overall, dowAvgs, best, worst };
+        });
+
+        const cellStyle = (avg: number | undefined, overall: number): React.CSSProperties => {
+          if (!avg || !overall) return { background: 'transparent', color: DIM };
+          const pct = (avg - overall) / overall * 100;
+          if (pct >  10) return { background: 'rgba(48,209,88,0.14)',  color: GREEN };
+          if (pct < -10) return { background: 'rgba(255,69,58,0.12)',  color: RED   };
+          return             { background: 'rgba(255,159,10,0.09)', color: AMBER  };
+        };
+
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Picker × Day Heatmap</div>
+            <div style={{ fontSize: 12, color: DIM, marginBottom: 12 }}>
+              Avg L/Hr per picker per weekday. Colour = performance vs that picker's own overall average —{' '}
+              <span style={{ color: GREEN }}>green &gt;10% above</span>, <span style={{ color: AMBER }}>amber ≈ average</span>, <span style={{ color: RED }}>red &gt;10% below</span>.
+              Scan a column to spot days the whole team slows down; scan a row to spot individual patterns.
+            </div>
+            <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
+              <table style={tbl}>
+                <thead>
+                  <tr>
+                    <th style={th}>Picker</th>
+                    <th style={{ ...th, color: DIM }}>Overall</th>
+                    {activeDows.map(d => <th key={d} style={{ ...th, textAlign: 'center' }}>{DN[d]}</th>)}
+                    <th style={{ ...th, color: GREEN }}>Best</th>
+                    <th style={{ ...th, color: RED   }}>Weakest</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.map((row, i) => (
+                    <tr key={row.name} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                      <td style={{ ...td, fontWeight: 600 }}>{row.name}</td>
+                      <td style={{ ...td, ...mono, color: DIM }}>{row.overall > 0 ? row.overall.toFixed(1) : '—'}</td>
+                      {activeDows.map(d => {
+                        const cell = row.dowAvgs.get(d);
+                        const cs   = cellStyle(cell?.avg, row.overall);
+                        return (
+                          <td key={d} style={{ ...td, ...mono, textAlign: 'center', ...cs }}>
+                            {cell ? cell.avg.toFixed(1) : <span style={{ color: DIM }}>—</span>}
+                          </td>
+                        );
+                      })}
+                      <td style={{ ...td, fontWeight: 700, color: GREEN }}>{row.best  != null ? DN[row.best]  : '—'}</td>
+                      <td style={{ ...td, fontWeight: 700, color: RED   }}>{row.worst != null ? DN[row.worst] : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{ ...section }}>
         <div style={secTitle}>Per-Picker Weekly Rollup</div>
         <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
@@ -1527,6 +1602,121 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
                 </div>
               )}
             </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Day of Week Pattern ──────────────────────────────────────────────── */}
+      {(() => {
+        const DN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const DO = [1,2,3,4,5,6,0];
+
+        // Picker's own L/Hr by DOW
+        const pickerDowMap = new Map<number, number[]>();
+        for (const d of lphDays) {
+          const dow = new Date(d.dateStr + 'T12:00:00').getDay();
+          if (!pickerDowMap.has(dow)) pickerDowMap.set(dow, []);
+          pickerDowMap.get(dow)!.push(d.linesPerHour!);
+        }
+        // Team L/Hr by DOW (all pickers)
+        const teamDowMap = new Map<number, number[]>();
+        for (const d of allStats.filter(s => s.linesPerHour != null)) {
+          const dow = new Date(d.dateStr + 'T12:00:00').getDay();
+          if (!teamDowMap.has(dow)) teamDowMap.set(dow, []);
+          teamDowMap.get(dow)!.push(d.linesPerHour!);
+        }
+
+        const activeDows = DO.filter(d => pickerDowMap.has(d));
+        if (activeDows.length < 2) return null;
+
+        const dowData = activeDows.map(d => {
+          const vals    = pickerDowMap.get(d)!;
+          const pAvg    = vals.reduce((s, v) => s + v, 0) / vals.length;
+          const tVals   = teamDowMap.get(d) ?? [];
+          const tAvg    = tVals.length ? tVals.reduce((s, v) => s + v, 0) / tVals.length : 0;
+          const vsSelf  = avgLph > 0 ? ((pAvg - avgLph) / avgLph) * 100 : 0;
+          return { day: DN[d], dow: d, pAvg: +pAvg.toFixed(2), tAvg: +tAvg.toFixed(2), vsSelf, count: vals.length,
+            barColor: vsSelf > 8 ? GREEN : vsSelf < -8 ? RED : AMBER };
+        });
+
+        const best  = [...dowData].sort((a, b) => b.pAvg - a.pAvg)[0];
+        const worst = [...dowData].sort((a, b) => a.pAvg - b.pAvg)[0];
+
+        // Is the team also slowest on picker's worst day?
+        const teamWorstDow = (() => {
+          const avgs = DO.filter(d => teamDowMap.has(d)).map(d => {
+            const v = teamDowMap.get(d)!;
+            return { dow: d, avg: v.reduce((s, x) => s + x, 0) / v.length };
+          });
+          return avgs.length ? avgs.reduce((a, b) => b.avg < a.avg ? b : a).dow : -1;
+        })();
+
+        let insight = '', insightColor = DIM;
+        if (best && worst && best.day !== worst.day) {
+          const spread = worst.pAvg > 0 ? ((best.pAvg - worst.pAvg) / worst.pAvg) * 100 : 0;
+          if (spread >= 12) {
+            if (teamWorstDow === worst.dow) {
+              insight = `${worst.day} is the weakest day (${worst.pAvg.toFixed(1)} L/Hr). The team is also slowest on ${worst.day} — this looks structural (volume, staffing, or workflow) rather than individual.`;
+              insightColor = AMBER;
+            } else {
+              insight = `${worst.day} is notably slower (${worst.pAvg.toFixed(1)} L/Hr vs ${best.pAvg.toFixed(1)} on ${best.day}). The team doesn't share this dip — this may point to a personal rhythm or scheduling factor worth looking into.`;
+              insightColor = YELLOW;
+            }
+          } else {
+            insight = `Performance is relatively even across all days — no significant day-of-week dip detected.`;
+            insightColor = DIM;
+          }
+        }
+
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Day of Week Pattern</div>
+
+            {best && worst && best.day !== worst.day && (
+              <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <div style={{ ...glass, padding: '8px 16px', borderRadius: 8, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Best</span>
+                  <span style={{ fontWeight: 700, color: GREEN, ...mono }}>{best.day}</span>
+                  <span style={{ ...mono, color: TEXT }}>{best.pAvg.toFixed(1)} L/Hr</span>
+                  <span style={{ fontSize: 10, color: DIM }}>· {best.count}d avg</span>
+                </div>
+                <div style={{ ...glass, padding: '8px 16px', borderRadius: 8, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Weakest</span>
+                  <span style={{ fontWeight: 700, color: RED, ...mono }}>{worst.day}</span>
+                  <span style={{ ...mono, color: TEXT }}>{worst.pAvg.toFixed(1)} L/Hr</span>
+                  <span style={{ fontSize: 10, color: DIM }}>· {worst.count}d avg</span>
+                </div>
+              </div>
+            )}
+
+            <div style={{ ...card, padding: '14px 0 8px 0' }}>
+              <div style={{ padding: '0 16px 8px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Avg L/Hr by day</span>
+                <span style={{ fontSize: 9, color: DIM }}>
+                  <span style={{ display: 'inline-block', width: 24, borderTop: `1.5px dashed ${DIM}`, verticalAlign: 'middle', marginRight: 4 }} />
+                  overall avg ({avgLph > 0 ? avgLph.toFixed(1) : '—'})
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={dowData} margin={{ left: 10, right: 20, top: 4, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="day" tick={{ fill: DIM, fontSize: 12 }} />
+                  <YAxis tick={{ fill: DIM, fontSize: 9 }} />
+                  <Tooltip content={<DarkTip />} />
+                  {avgLph > 0 && <ReferenceLine y={avgLph} stroke={DIM} strokeDasharray="5 3" />}
+                  <Bar dataKey="pAvg" name="Avg L/Hr" radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: DIM, fontSize: 9, formatter: (v: number) => v > 0 ? v.toFixed(1) : '' }}>
+                    {dowData.map((entry, i) => <Cell key={i} fill={entry.barColor} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {insight && (
+              <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 10, background: `${insightColor}12`, borderLeft: `3px solid ${insightColor}`, fontSize: 12, color: TEXT, lineHeight: 1.75 }}>
+                {insight}
+              </div>
+            )}
           </div>
         );
       })()}
