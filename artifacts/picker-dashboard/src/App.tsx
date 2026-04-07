@@ -293,34 +293,41 @@ function assignRatings(statsByDate: Map<string, DayStats[]>) {
 }
 
 // ─── BATCH / CLUSTER ANALYSIS ─────────────────────────────────────────────────
-const BATCH_GAP_MINUTES = 8;
+// Timestamp structure: pickers enter orders one by one; only the LAST order of
+// each run gets a timestamp. Orders with null timestamps are mid-batch. The
+// timestamp closes the batch — everything since the previous close is one run.
 
 interface Batch { orderCount: number; lineCount: number; }
 
-function computeBatches(orders: Order[], gapMin = BATCH_GAP_MINUTES): Batch[] {
-  const timed = [...orders].filter(o => o.timeMinutes != null).sort((a, b) => a.timeMinutes! - b.timeMinutes!);
-  if (!timed.length) return [];
+function computeBatches(dayOrders: Order[]): Batch[] {
+  // Same phantom logic as removePhantomTimes: if any timestamp >= 240 exists,
+  // early-morning ones (< 240) are phantom and do NOT close a batch.
+  const allTimes = dayOrders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
+  const hasMain = allTimes.some(t => t >= 240);
+  const closesRun = (t: number | null) => t !== null && !(hasMain && t < 240);
+
   const batches: Batch[] = [];
-  let cur = [timed[0]];
-  for (let i = 1; i < timed.length; i++) {
-    if (timed[i].timeMinutes! - timed[i - 1].timeMinutes! >= gapMin) {
+  let cur: Order[] = [];
+  for (const order of dayOrders) {
+    cur.push(order);
+    if (closesRun(order.timeMinutes)) {
       batches.push({ orderCount: cur.length, lineCount: cur.reduce((s, o) => s + o.linesPicked, 0) });
-      cur = [timed[i]];
-    } else {
-      cur.push(timed[i]);
+      cur = [];
     }
+    // null or phantom timestamp → order stays in current accumulation
   }
-  batches.push({ orderCount: cur.length, lineCount: cur.reduce((s, o) => s + o.linesPicked, 0) });
+  // any remaining cur = incomplete run with no closing timestamp yet — ignore
   return batches;
 }
 
-function pickerBatchStats(allOrders: Order[]) {
-  const batches = computeBatches(allOrders);
-  if (!batches.length) return null;
-  const avgOrders = batches.reduce((s, b) => s + b.orderCount, 0) / batches.length;
-  const avgLines  = batches.reduce((s, b) => s + b.lineCount,  0) / batches.length;
-  const maxBatch  = Math.max(...batches.map(b => b.orderCount));
-  return { batches, avgOrders, avgLines, maxBatch, totalRuns: batches.length };
+function pickerBatchStats(pickerDays: PickerDayData[]) {
+  // Compute per-day to avoid merging runs across day boundaries
+  const allBatches = pickerDays.flatMap(d => computeBatches(d.orders));
+  if (!allBatches.length) return null;
+  const avgOrders = allBatches.reduce((s, b) => s + b.orderCount, 0) / allBatches.length;
+  const avgLines  = allBatches.reduce((s, b) => s + b.lineCount,  0) / allBatches.length;
+  const maxBatch  = Math.max(...allBatches.map(b => b.orderCount));
+  return { batches: allBatches, avgOrders, avgLines, maxBatch, totalRuns: allBatches.length };
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
@@ -638,10 +645,8 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
   const totalOrdersAll = allStats.reduce((s, d) => s + d.totalOrders, 0);
 
   const batchRows = pickerNames.map((name, i) => {
-    const orders = Object.values(pickerData)
-      .filter(d => d.pickerName === name)
-      .flatMap(d => d.orders);
-    const bs = pickerBatchStats(orders);
+    const days = Object.values(pickerData).filter(d => d.pickerName === name);
+    const bs = pickerBatchStats(days);
     return { name, bs, color: PICKER_COLORS[i % PICKER_COLORS.length] };
   }).filter(r => r.bs !== null) as { name: string; bs: NonNullable<ReturnType<typeof pickerBatchStats>>; color: string }[];
 
@@ -696,7 +701,7 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
 
       {batchRows.length > 0 && (
         <div style={{ ...section }}>
-          <div style={secTitle}>Order Clustering — Avg Orders per Run <span style={{ fontSize: 10, color: DIM, fontWeight: 400 }}>≥{BATCH_GAP_MINUTES} min gap = new run</span></div>
+          <div style={secTitle}>Order Clustering — Avg Orders per Run <span style={{ fontSize: 10, color: DIM, fontWeight: 400 }}>timestamp on last order of each run</span></div>
           <div style={{ ...card, padding: '20px 24px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[...batchRows].sort((a, b) => b.bs.avgOrders - a.bs.avgOrders).map(r => {
@@ -1108,10 +1113,8 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   const vsTeam = teamAvgLph > 0 ? ((avgLph - teamAvgLph) / teamAvgLph) * 100 : 0;
 
   // ── Batch clustering ─────────────────────────────────────────────────────────
-  const pickerAllOrders = Object.values(pickerData)
-    .filter(d => d.pickerName === sel)
-    .flatMap(d => d.orders);
-  const batchStats = pickerBatchStats(pickerAllOrders);
+  const pickerDays = Object.values(pickerData).filter(d => d.pickerName === sel);
+  const batchStats = pickerBatchStats(pickerDays);
 
   // ── Trend direction: last 5 days vs prior 5 days (by L/Hr) ──────────────────
   const lphSorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
@@ -1230,7 +1233,7 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         const maxCount = Math.max(...sizeBuckets.map(b => b.count), 1);
         return (
           <div style={{ ...section }}>
-            <div style={secTitle}>Order Clustering <span style={{ fontSize: 10, color: DIM, fontWeight: 400 }}>≥{BATCH_GAP_MINUTES} min gap = new run</span></div>
+            <div style={secTitle}>Order Clustering <span style={{ fontSize: 10, color: DIM, fontWeight: 400 }}>timestamp on last order of each run</span></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ ...card, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
