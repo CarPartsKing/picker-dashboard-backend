@@ -64,13 +64,3 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-
-/* ─── PRINT ─────────────────────────────────────────────────────────────────── */
-#print-root { display: none; }
-
-@media print {
-  #root        { display: none !important; }
-  #print-root  { display: block !important; }
-  body         { background: #fff !important; }
-  @page        { margin: 0.6in; }
-}

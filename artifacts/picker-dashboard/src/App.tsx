@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import {
   BarChart, Bar, LineChart, Line, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, CartesianGrid,
@@ -636,160 +635,6 @@ const SCORE_BANDS = [
   { range: '40–54',  label: 'Developing',  color: YELLOW },
   { range: '0–39',   label: 'Needs Focus', color: RED },
 ];
-
-// ─── PRINT SCORECARD ──────────────────────────────────────────────────────────
-interface PrintProps {
-  picker: string; days: DayStats[]; allStats: DayStats[];
-  allGapFlags: GapFlag[]; pickerData: Record<string, PickerDayData>;
-  allDates: string[]; avgLph: number; avgLpo: number;
-  teamAvgLph: number; teamAvgLpo: number;
-  vsTeam: number; vsTeamLpo: number;
-  trendValue: string; trendSub: string | null;
-  consistencyValue: string; consistencySub: string | null;
-  totalLines: number; totalOrders: number; pickerGaps: GapFlag[];
-}
-function PrintScorecard(p: PrintProps) {
-  const score = useMemo(
-    () => computePickerScore(p.picker, p.allStats, p.allGapFlags, p.pickerData),
-    [p.picker, p.allStats, p.allGapFlags, p.pickerData],
-  );
-
-  const strengths: string[] = [];
-  const focus: string[] = [];
-  if (p.avgLph > 0 && p.teamAvgLph > 0) {
-    if (p.avgLph >= p.teamAvgLph * 1.05) strengths.push(`Above-average pick rate — ${p.avgLph.toFixed(1)} L/Hr vs team ${p.teamAvgLph.toFixed(1)}`);
-    else if (p.avgLph < p.teamAvgLph * 0.95) focus.push(`Pick rate below team average — ${p.avgLph.toFixed(1)} L/Hr vs team ${p.teamAvgLph.toFixed(1)}`);
-  }
-  if (p.consistencyValue === 'High') strengths.push(`Steady day-to-day output (${p.consistencySub})`);
-  else if (p.consistencyValue === 'Low') focus.push(`Variable output day to day (${p.consistencySub})`);
-  if (p.trendValue.startsWith('↑')) strengths.push(`Improving trend — ${p.trendValue.replace('↑ ', '')} ${p.trendSub ?? ''}`);
-  else if (p.trendValue.startsWith('↓')) focus.push(`Declining trend — ${p.trendValue.replace('↓ ', '')} ${p.trendSub ?? ''}`);
-  if (p.pickerGaps.length === 0 && p.days.length >= 3) strengths.push(`No gap flags across ${p.days.length} days`);
-  else if (p.pickerGaps.length > 0) focus.push(`${p.pickerGaps.length} gap flag${p.pickerGaps.length > 1 ? 's' : ''} recorded`);
-  if (p.avgLpo > 0 && p.teamAvgLpo > 0) {
-    if (p.vsTeamLpo >= 20) strengths.push(`Handles orders ${p.vsTeamLpo.toFixed(0)}% more complex than team average (${p.avgLpo.toFixed(1)} vs ${p.teamAvgLpo.toFixed(1)} L/Order)`);
-    else if (p.vsTeamLpo <= -20) focus.push(`Order complexity ${Math.abs(p.vsTeamLpo).toFixed(0)}% below team average (${p.avgLpo.toFixed(1)} vs ${p.teamAvgLpo.toFixed(1)} L/Order)`);
-  }
-
-  const dateStr = p.allDates.length > 1
-    ? `${fmtDate(p.allDates[0])} → ${fmtDate(p.allDates[p.allDates.length - 1])}`
-    : p.allDates.length === 1 ? fmtDate(p.allDates[0]) : '—';
-
-  const kpiKeys = ['pickRate', 'consistency', 'uptime', 'batchEff', 'trend'] as const;
-  const el = document.getElementById('print-root');
-  if (!el) return null;
-
-  const pS = { fontFamily: "'DM Sans','Helvetica Neue',Arial,sans-serif", color: '#111' };
-  const pBorder = '1px solid #ddd';
-
-  return createPortal(
-    <div style={{ ...pS, padding: '32px 40px', background: '#fff', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, paddingBottom: 14, borderBottom: '2px solid #111' }}>
-        <div>
-          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#888', marginBottom: 4 }}>Picker Scorecard</div>
-          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em' }}>{p.picker}</div>
-          <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Period: {dateStr} · {p.days.length} day{p.days.length !== 1 ? 's' : ''} worked</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 8, color: '#aaa', marginBottom: 2, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Printed</div>
-          <div style={{ fontSize: 11, fontFamily: 'monospace' }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-        </div>
-      </div>
-
-      {/* Key stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 24 }}>
-        {([
-          { label: 'Avg L/Hr',     value: p.avgLph > 0      ? p.avgLph.toFixed(1)  : '—' },
-          { label: 'Lines/Order',  value: p.avgLpo > 0      ? p.avgLpo.toFixed(1)  : '—' },
-          { label: 'Total Lines',  value: p.totalLines.toLocaleString() },
-          { label: 'Total Orders', value: p.totalOrders.toLocaleString() },
-          { label: 'vs Team Avg',  value: p.vsTeam !== 0    ? `${p.vsTeam > 0 ? '+' : ''}${p.vsTeam.toFixed(1)}%` : '—' },
-          { label: 'Days Worked',  value: String(p.days.length) },
-        ] as const).map(({ label, value }) => (
-          <div key={label} style={{ border: pBorder, borderRadius: 7, padding: '10px 12px' }}>
-            <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#999', marginBottom: 5 }}>{label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '-0.02em' }}>{value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Score + KPI breakdown */}
-      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 16, marginBottom: 24 }}>
-        <div style={{ border: '2px solid #111', borderRadius: 9, padding: '18px 14px', textAlign: 'center' }}>
-          <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#888', marginBottom: 6 }}>Performance Score</div>
-          <div style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 1 }}>{score.total}</div>
-          <div style={{ fontSize: 9, color: '#aaa', marginTop: 2 }}>/ 100</div>
-          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 10, color: score.bandColor === '#F5F5F7' ? '#111' : score.bandColor }}>{score.band}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#888', marginBottom: 10 }}>KPI Breakdown</div>
-          {kpiKeys.map(key => {
-            const kpi  = score[key] as KpiResult;
-            const meta = KPI_META.find(m => m.key === key)!;
-            const pct  = Math.round((kpi.pts / kpi.max) * 100);
-            return (
-              <div key={key} style={{ display: 'grid', gridTemplateColumns: '120px 28px 1fr 48px', gap: 8, alignItems: 'center', marginBottom: 9 }}>
-                <div style={{ ...pS, fontSize: 11, fontWeight: 600 }}>{kpi.label}</div>
-                <div style={{ fontSize: 8, color: '#aaa', fontFamily: 'monospace' }}>{kpi.max}pt</div>
-                <div style={{ background: '#eee', borderRadius: 3, height: 7, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: meta.color, borderRadius: 3 }} />
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', textAlign: 'right' }}>{kpi.pts}/{kpi.max}</div>
-              </div>
-            );
-          })}
-          <div style={{ marginTop: 6, fontSize: 9, color: '#aaa', fontStyle: 'italic' }}>
-            {kpiKeys.map(k => `${(score[k] as KpiResult).label}: ${(score[k] as KpiResult).rawValue}`).join(' · ')}
-          </div>
-        </div>
-      </div>
-
-      {/* Strengths & Focus */}
-      {(strengths.length > 0 || focus.length > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 24 }}>
-          <div style={{ border: pBorder, borderRadius: 7, padding: '14px 16px' }}>
-            <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1a6e1a', marginBottom: 9 }}>Strengths</div>
-            {strengths.length === 0
-              ? <div style={{ fontSize: 10, color: '#aaa' }}>Nothing notable</div>
-              : strengths.map((s, i) => (
-                <div key={i} style={{ display: 'flex', gap: 7, marginBottom: 6 }}>
-                  <span style={{ color: '#1a6e1a', fontWeight: 700, flexShrink: 0, fontSize: 11 }}>✓</span>
-                  <span style={{ ...pS, fontSize: 10, lineHeight: 1.55 }}>{s}</span>
-                </div>
-              ))}
-          </div>
-          <div style={{ border: pBorder, borderRadius: 7, padding: '14px 16px' }}>
-            <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8b5000', marginBottom: 9 }}>Focus Areas</div>
-            {focus.length === 0
-              ? <div style={{ fontSize: 10, color: '#aaa' }}>Nothing notable</div>
-              : focus.map((s, i) => (
-                <div key={i} style={{ display: 'flex', gap: 7, marginBottom: 6 }}>
-                  <span style={{ color: '#8b5000', flexShrink: 0, fontSize: 11 }}>·</span>
-                  <span style={{ ...pS, fontSize: 10, lineHeight: 1.55 }}>{s}</span>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {/* Consistency glossary note */}
-      <div style={{ border: pBorder, borderRadius: 7, padding: '12px 16px', marginBottom: 24, background: '#fafafa' }}>
-        <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#888', marginBottom: 6 }}>About the Score</div>
-        <div style={{ ...pS, fontSize: 9, lineHeight: 1.7, color: '#555' }}>
-          Score out of 100 across five KPIs: Pick Rate (35 pts) — L/Hr vs team avg; Consistency (25 pts) — day-to-day CV; Uptime (20 pts) — gap flag penalties; Batch Efficiency (10 pts) — avg orders per run; Trend (10 pts) — recent vs prior period L/Hr.
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div style={{ paddingTop: 10, borderTop: pBorder, fontSize: 8, color: '#bbb', display: 'flex', justifyContent: 'space-between' }}>
-        <span>Picker Performance Dashboard</span>
-        <span>Confidential — for internal use only</span>
-      </div>
-    </div>,
-    el,
-  );
-}
 
 function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
   allStats: DayStats[]; allGapFlags: GapFlag[];
@@ -1691,21 +1536,12 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
 
   const sortedDays    = [...days].sort((a, b) => b.dateStr.localeCompare(a.dateStr));
   const pickerGaps    = days.flatMap(s => s.gapFlags).sort((a, b) => b.gapMinutes - a.gapMinutes);
-  const allGapFlags   = useMemo(() => allStats.flatMap(s => s.gapFlags), [allStats]);
 
   return (
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Select Picker</div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Dropdown value={sel} onChange={setSel} options={pickerNames} />
-          <button
-            onClick={() => window.print()}
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '8px 16px', color: TEXT, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em', whiteSpace: 'nowrap', flexShrink: 0 }}
-          >
-            ⎙ Print Scorecard
-          </button>
-        </div>
+        <Dropdown value={sel} onChange={setSel} options={pickerNames} />
       </div>
 
       <div style={{ ...section }}>
@@ -2142,30 +1978,6 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         </div>
       )}
 
-      <PrintScorecard
-        picker={sel}
-        days={days}
-        allStats={allStats}
-        allGapFlags={allGapFlags}
-        pickerData={pickerData}
-        allDates={allDates}
-        avgLph={avgLph}
-        avgLpo={avgLpo}
-        teamAvgLph={teamAvgLph}
-        teamAvgLpo={teamAvgLpo}
-        vsTeam={vsTeam}
-        vsTeamLpo={vsTeamLpo}
-        trendValue={trendValue}
-        trendSub={trendSub || null}
-        consistencyValue={consistencyValue}
-        consistencySub={consistencySub || null}
-        totalLines={totalLines}
-        totalOrders={totalOrders}
-        pickerGaps={pickerGaps}
-      />
-    </div>
-  );
-}
 
 // ─── GAP FLAGS TAB ────────────────────────────────────────────────────────────
 function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump, pickerData }: {
