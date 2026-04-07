@@ -649,10 +649,20 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
 
   const scores = useMemo(() =>
     pickerNames
-      .map(p => ({ name: p, score: computePickerScore(p, allStats, allGapFlags, pickerData) }))
+      .map(p => {
+        const days = allStats.filter(s => s.pickerName === p);
+        const lphDays = days.filter(s => s.linesPerHour !== null);
+        const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+        return { name: p, score: computePickerScore(p, allStats, allGapFlags, pickerData), avgLph };
+      })
       .sort((a, b) => b.score.total - a.score.total),
     [pickerNames, allStats, allGapFlags, pickerData],
   );
+
+  const teamBenchmarkLph = useMemo(() => {
+    const valid = scores.filter(s => s.avgLph > 0);
+    return valid.length ? valid.reduce((s, p) => s + p.avgLph, 0) / valid.length : 0;
+  }, [scores]);
 
   const selScore = useMemo(() =>
     computePickerScore(sel, allStats, allGapFlags, pickerData),
@@ -697,6 +707,18 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
               <div style={{ marginTop: 10, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 2 }}>
                 <div style={{ height: '100%', width: `${s.score.total}%`, background: s.score.bandColor, borderRadius: 2, transition: 'width 0.5s' }} />
               </div>
+              {teamBenchmarkLph > 0 && s.avgLph > 0 && (() => {
+                const meets = s.avgLph >= teamBenchmarkLph;
+                const col = meets ? GREEN : RED;
+                return (
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: col, background: `${col}18`, border: `1px solid ${col}44`, borderRadius: 5, padding: '2px 6px', letterSpacing: '0.04em' }}>
+                      {meets ? '✓ Meets' : '✗ Below'}
+                    </span>
+                    <span style={{ fontSize: 9, color: DIM }}>{meets ? '+' : ''}{(s.avgLph - teamBenchmarkLph).toFixed(1)}</span>
+                  </div>
+                );
+              })()}
             </button>
           ))}
         </div>
@@ -924,6 +946,11 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
     return { name, avgLph, totalLines, totalOrders, daysWorked: days.length, color: PICKER_COLORS[i % PICKER_COLORS.length] };
   }).sort((a, b) => b.avgLph - a.avgLph), [allStats, pickerNames]);
 
+  const teamBenchmark = useMemo(() => {
+    const valid = leaderboard.filter(p => p.avgLph > 0);
+    return valid.length ? valid.reduce((s, p) => s + p.avgLph, 0) / valid.length : 0;
+  }, [leaderboard]);
+
   const chartData = useMemo(() => allDates.map(ds => {
     const byDate = allStats.filter(s => s.dateStr === ds);
     const obj: Record<string, string | number> = { date: fmtDate(ds) };
@@ -954,17 +981,40 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
 
       <div style={{ ...section }}>
         <div style={secTitle}>Team Snapshot — Avg Lines / Hr</div>
+        {teamBenchmark > 0 && (
+          <div style={{ fontSize: 11, color: DIM, marginBottom: 10 }}>
+            Team benchmark: <span style={{ color: TEXT, fontWeight: 600, ...mono }}>{teamBenchmark.toFixed(1)} L/Hr</span>
+            <span style={{ marginLeft: 8, color: DIM }}>(mean of all pickers)</span>
+          </div>
+        )}
         <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
-          {leaderboard.map((p) => (
-            <div key={p.name} style={{ ...card, borderLeft: `3px solid ${p.color}` }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-                <span style={{ fontSize: 10, color: DIM }}>{p.daysWorked}d logged</span>
+          {leaderboard.map((p) => {
+            const meetsbenchmark = teamBenchmark > 0 && p.avgLph >= teamBenchmark;
+            const benchmarkColor = p.avgLph === 0 ? DIM : meetsbenchmark ? GREEN : RED;
+            const benchmarkLabel = p.avgLph === 0 ? '—' : meetsbenchmark ? '✓ Meets' : '✗ Below';
+            return (
+              <div key={p.name} style={{ ...card, borderLeft: `3px solid ${p.color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, color: DIM }}>{p.daysWorked}d logged</span>
+                  {teamBenchmark > 0 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: benchmarkColor, background: `${benchmarkColor}18`, border: `1px solid ${benchmarkColor}44`, borderRadius: 6, padding: '2px 7px', letterSpacing: '0.04em' }}>
+                      {benchmarkLabel}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{p.name}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: AMBER, ...mono }}>{p.avgLph > 0 ? p.avgLph.toFixed(1) : '—'}</div>
+                {teamBenchmark > 0 && p.avgLph > 0 && (
+                  <div style={{ fontSize: 10, color: benchmarkColor, marginTop: 3 }}>
+                    {meetsbenchmark
+                      ? `+${((p.avgLph - teamBenchmark)).toFixed(1)} above benchmark`
+                      : `${((p.avgLph - teamBenchmark)).toFixed(1)} below benchmark`}
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: DIM, marginTop: 4 }}>{p.totalLines.toLocaleString()} lines · {p.totalOrders} orders</div>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{p.name}</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: AMBER, ...mono }}>{p.avgLph > 0 ? p.avgLph.toFixed(1) : '—'}</div>
-              <div style={{ fontSize: 10, color: DIM, marginTop: 4 }}>{p.totalLines.toLocaleString()} lines · {p.totalOrders} orders</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -1557,6 +1607,33 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
             onInfo={() => setShowConsistencyInfo(s => !s)} />
         </div>
       </div>
+
+      {/* ── Benchmark Banner ─────────────────────────────────────────────────── */}
+      {teamAvgLph > 0 && avgLph > 0 && (() => {
+        const meets = avgLph >= teamAvgLph;
+        const diff  = avgLph - teamAvgLph;
+        const pct   = Math.abs((diff / teamAvgLph) * 100).toFixed(0);
+        const col   = meets ? GREEN : RED;
+        return (
+          <div style={{ ...card, padding: '16px 22px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16, borderLeft: `4px solid ${col}` }}>
+            <div style={{ fontSize: 22, lineHeight: 1 }}>{meets ? '✓' : '✗'}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: col, marginBottom: 3 }}>
+                {meets ? 'Meets Team Benchmark' : 'Below Team Benchmark'}
+              </div>
+              <div style={{ fontSize: 11, color: DIM }}>
+                {sel}'s avg of <span style={{ color: TEXT, fontWeight: 600, ...mono }}>{avgLph.toFixed(1)} L/Hr</span>
+                {' '}is <span style={{ color: col, fontWeight: 600 }}>{pct}% {meets ? 'above' : 'below'}</span>
+                {' '}the team average of <span style={{ color: TEXT, fontWeight: 600, ...mono }}>{teamAvgLph.toFixed(1)} L/Hr</span>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: col, ...mono }}>{diff > 0 ? '+' : ''}{diff.toFixed(1)}</div>
+              <div style={{ fontSize: 10, color: DIM }}>L/Hr vs benchmark</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showConsistencyInfo && (
         <div style={{ ...card, padding: '20px 24px', marginBottom: 24 }}>
