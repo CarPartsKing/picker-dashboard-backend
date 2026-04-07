@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, LineChart, Line, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import type { Order, PickerDayRaw } from './parseUtils';
+import { toDateStr } from './parseUtils';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const BG   = '#08080F';
@@ -25,11 +26,9 @@ const PICKER_COLORS = [
 ];
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
-interface Order {
-  orderNumber: string;
-  linesPicked: number;
-  timeMinutes: number | null;
-}
+// Order is re-exported from parseUtils
+export type { Order };
+
 interface PickerDayData {
   pickerName: string;
   dateStr: string;
@@ -68,142 +67,7 @@ interface FileHistoryEntry {
   recordsReplaced: number;
 }
 
-// ─── PARSING UTILITIES ────────────────────────────────────────────────────────
-
-function parseTabDate(tabName: string): Date | null {
-  const digits = tabName.replace(/\D/g, '');
-  if (digits.length < 5) return null;
-  const year = parseInt(digits.slice(-4), 10);
-  if (year < 2000 || year > 2100) return null;
-  const md = digits.slice(0, -4);
-  let month: number, day: number;
-  if (md.length === 2) {
-    month = parseInt(md[0], 10);
-    day   = parseInt(md[1], 10);
-  } else if (md.length === 3) {
-    const twoM = parseInt(md.slice(0, 2), 10);
-    const oneD = parseInt(md[2], 10);
-    if (twoM >= 10 && twoM <= 12 && oneD >= 1 && oneD <= 9) {
-      month = twoM; day = oneD;
-    } else {
-      month = parseInt(md[0], 10);
-      day   = parseInt(md.slice(1), 10);
-    }
-  } else if (md.length === 4) {
-    month = parseInt(md.slice(0, 2), 10);
-    day   = parseInt(md.slice(2), 10);
-  } else return null;
-  if (!month || month < 1 || month > 12 || !day || day < 1 || day > 31) return null;
-  const d = new Date(year, month - 1, day);
-  if (d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  return d;
-}
-
-function parseTime(val: unknown): number | null {
-  if (val === null || val === undefined || val === '') return null;
-  if (typeof val === 'number') {
-    if (val > 0 && val < 1) return Math.round(val * 24 * 60);
-    const v = Math.floor(Math.abs(val));
-    if (v >= 0 && v <= 2359) {
-      const h = Math.floor(v / 100), m = v % 100;
-      if (h <= 23 && m <= 59) return h * 60 + m;
-    }
-    return null;
-  }
-  const str = String(val).trim();
-  if (!str) return null;
-  const sep = str.includes(';') ? ';' : str.includes(':') ? ':' : null;
-  if (sep) {
-    const [hs, ms] = str.split(sep);
-    const h = parseInt(hs, 10), m = parseInt(ms, 10);
-    if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) return h * 60 + m;
-  }
-  const n = parseInt(str, 10);
-  if (!isNaN(n) && n >= 0 && n <= 2359) {
-    const h = Math.floor(n / 100), m = n % 100;
-    if (h <= 23 && m <= 59) return h * 60 + m;
-  }
-  return null;
-}
-
-const SKIP_RE = /^(pullers|team[\s_]?goals?|notes?|total|goals?|goal|#)/i;
-
-function parseSheet(
-  sheet: XLSX.WorkSheet,
-  sheetName: string,
-  loadedAt: Date
-): Record<string, Omit<PickerDayData, 'loadedAt'>> {
-  const date = parseTabDate(sheetName);
-  if (!date) return {};
-  const dateStr = toDateStr(date);
-  const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true }) as unknown[][];
-  if (!raw || raw.length < 2) return {};
-  const headerRow = (raw[0] as unknown[]) || [];
-  // Scan every column — do NOT stride by 3. If the sheet has any extra/separator
-  // column the stride assumption breaks and every subsequent picker reads from
-  // the wrong columns, producing phantom timestamps.
-  const COL_HEADER_RE = /^(lines?|times?|orders?|qty|quantity|picks?|date|total|#)$/i;
-  const pickers: { name: string; col: number }[] = [];
-  for (let col = 0; col < headerRow.length; col++) {
-    const cell = headerRow[col];
-    if (typeof cell !== 'string') continue;
-    const name = cell.trim();
-    if (!name) continue;
-    if (COL_HEADER_RE.test(name)) continue; // skip column-header words, not picker names
-    if (SKIP_RE.test(name)) continue;
-    pickers.push({ name, col });
-  }
-  // Remove duplicates that arise when consecutive columns all look like picker
-  // names (shouldn't happen in a well-formed sheet, but guard anyway).
-  const seenCols = new Set<number>();
-  const dedupedPickers = pickers.filter(p => {
-    if (seenCols.has(p.col)) return false;
-    seenCols.add(p.col);
-    return true;
-  });
-  // Get row visibility metadata so we can skip hidden rows (common source of
-  // phantom data the user never sees when scrolling through Excel).
-  const rowMeta = (sheet['!rows'] as Array<{ hidden?: boolean } | undefined> | undefined) ?? [];
-  const result: Record<string, Omit<PickerDayData, 'loadedAt'>> = {};
-  for (const { name, col } of dedupedPickers) {
-    const orders: Order[] = [];
-    for (let row = 1; row < raw.length; row++) {
-      // Skip rows hidden in Excel — they are invisible to the user but the
-      // xlsx library includes them, which creates phantom data points.
-      if (rowMeta[row]?.hidden) continue;
-      const r = (raw[row] as unknown[]) || [];
-      const orderCell = r[col];
-      const linesCell = r[col + 1];
-      const timeCell  = r[col + 2];
-      if (orderCell === null || orderCell === undefined) continue;
-      if (typeof orderCell === 'string') {
-        const t = orderCell.trim();
-        if (!t || SKIP_RE.test(t)) continue;
-      }
-      // Also skip numeric order cells that are 0 or negative (blank-cell
-      // default values Excel sometimes writes into "empty" cells).
-      if (typeof orderCell === 'number' && orderCell <= 0) continue;
-      const timeMinutes = parseTime(timeCell);
-      const lines = typeof linesCell === 'number'
-        ? Math.round(linesCell)
-        : parseInt(String(linesCell ?? '0'), 10) || 0;
-      // A real pick must have at least 1 line. Rows with 0 lines are totals,
-      // blank spacers, or summary cells — including them creates phantom timestamps.
-      if (lines <= 0) continue;
-      orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes });
-    }
-    if (orders.length > 0) {
-      result[`${name}|${dateStr}`] = { pickerName: name, date, dateStr, orders };
-    }
-  }
-  return result;
-}
-
 // ─── KPI COMPUTATION ──────────────────────────────────────────────────────────
-
-function toDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 function fmtMin(m: number): string {
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
 }
@@ -644,30 +508,39 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
   const totalLinesAll = allStats.reduce((s, d) => s + d.totalLines, 0);
   const totalOrdersAll = allStats.reduce((s, d) => s + d.totalOrders, 0);
 
-  const batchRows = pickerNames.map((name, i) => {
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
+
+  const batchRows = useMemo(() => pickerNames.map((name, i) => {
     const days = Object.values(pickerData).filter(d => d.pickerName === name);
     const bs = pickerBatchStats(days);
     return { name, bs, color: PICKER_COLORS[i % PICKER_COLORS.length] };
-  }).filter(r => r.bs !== null) as { name: string; bs: NonNullable<ReturnType<typeof pickerBatchStats>>; color: string }[];
+  }).filter(r => r.bs !== null) as { name: string; bs: NonNullable<ReturnType<typeof pickerBatchStats>>; color: string }[], [pickerData, pickerNames]);
 
   const maxAvgOrders = batchRows.length ? Math.max(...batchRows.map(r => r.bs.avgOrders)) : 1;
 
-  const leaderboard = pickerNames.map((name, i) => {
+  const leaderboard = useMemo(() => pickerNames.map((name, i) => {
     const days = allStats.filter(s => s.pickerName === name);
     const lphDays = days.filter(s => s.linesPerHour !== null);
     const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
     const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
     const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
     return { name, avgLph, totalLines, totalOrders, daysWorked: days.length, color: PICKER_COLORS[i % PICKER_COLORS.length] };
-  }).sort((a, b) => b.avgLph - a.avgLph);
+  }).sort((a, b) => b.avgLph - a.avgLph), [allStats, pickerNames]);
 
-  const chartData = allDates.map(ds => {
+  const chartData = useMemo(() => allDates.map(ds => {
+    const byDate = allStats.filter(s => s.dateStr === ds);
     const obj: Record<string, string | number> = { date: fmtDate(ds) };
-    pickerNames.forEach(n => { obj[n] = allStats.find(s => s.dateStr === ds && s.pickerName === n)?.totalLines ?? 0; });
+    pickerNames.forEach(n => { obj[n] = byDate.find(s => s.pickerName === n)?.totalLines ?? 0; });
     return obj;
-  });
+  }), [allDates, allStats, pickerNames]);
 
-  const tableRows = [...allStats].sort((a, b) => b.dateStr.localeCompare(a.dateStr) || a.pickerName.localeCompare(b.pickerName));
+  const tableRows = useMemo(() =>
+    [...allStats].sort((a, b) => b.dateStr.localeCompare(a.dateStr) || a.pickerName.localeCompare(b.pickerName)),
+  [allStats]);
+
+  const totalPages = Math.ceil(tableRows.length / PAGE_SIZE);
+  const pageRows = tableRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
@@ -771,14 +644,23 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
       )}
 
       <div style={{ ...section }}>
-        <div style={secTitle}>Full Daily Breakdown</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={secTitle}>Full Daily Breakdown <span style={{ fontSize: 11, color: DIM, fontWeight: 400 }}>({tableRows.length} records)</span></div>
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {btn('‹', () => setPage(p => Math.max(0, p - 1)), { padding: '4px 10px', opacity: page === 0 ? 0.35 : 1 })}
+              <span style={{ fontSize: 11, color: DIM }}>{page + 1} / {totalPages}</span>
+              {btn('›', () => setPage(p => Math.min(totalPages - 1, p + 1)), { padding: '4px 10px', opacity: page === totalPages - 1 ? 0.35 : 1 })}
+            </div>
+          )}
+        </div>
         <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
           <table style={tbl}>
             <thead><tr>
               {['Date','Picker','Lines','Orders','L/Hr','Ord/Hr','Avg L/Ord','Window','Gaps'].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {tableRows.map((s, i) => (
+              {pageRows.map((s, i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                   <td style={{ ...td, ...mono, fontSize: 11 }}>{fmtDate(s.dateStr)}</td>
                   <td style={td}>{s.pickerName}</td>
@@ -794,6 +676,13 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+            {btn('‹ Prev', () => setPage(p => Math.max(0, p - 1)), { opacity: page === 0 ? 0.35 : 1 })}
+            <span style={{ fontSize: 11, color: DIM, alignSelf: 'center' }}>Page {page + 1} of {totalPages} · showing {pageRows.length} of {tableRows.length}</span>
+            {btn('Next ›', () => setPage(p => Math.min(totalPages - 1, p + 1)), { opacity: page === totalPages - 1 ? 0.35 : 1 })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1102,19 +991,22 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
     else if (pickerNames.length > 0 && !pickerNames.includes(sel)) setSel(pickerNames[0]);
   }, [externalPicker, pickerNames]);
 
-  const days = allStats.filter(s => s.pickerName === sel);
+  const teamAvgLph = useMemo(() => {
+    const lphs = allStats.filter(s => s.linesPerHour != null);
+    return lphs.length ? lphs.reduce((s, d) => s + d.linesPerHour!, 0) / lphs.length : 0;
+  }, [allStats]);
+
+  const days = useMemo(() => allStats.filter(s => s.pickerName === sel), [allStats, sel]);
   const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
   const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
   const lphDays = days.filter(s => s.linesPerHour != null);
   const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
   const avgLpo = totalOrders > 0 ? totalLines / totalOrders : 0;
-  const teamLphs = allStats.filter(s => s.linesPerHour != null);
-  const teamAvgLph = teamLphs.length ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
   const vsTeam = teamAvgLph > 0 ? ((avgLph - teamAvgLph) / teamAvgLph) * 100 : 0;
 
   // ── Batch clustering ─────────────────────────────────────────────────────────
-  const pickerDays = Object.values(pickerData).filter(d => d.pickerName === sel);
-  const batchStats = pickerBatchStats(pickerDays);
+  const pickerDays = useMemo(() => Object.values(pickerData).filter(d => d.pickerName === sel), [pickerData, sel]);
+  const batchStats = useMemo(() => pickerBatchStats(pickerDays), [pickerDays]);
 
   // ── Trend direction: last 5 days vs prior 5 days (by L/Hr) ──────────────────
   const lphSorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
@@ -1460,23 +1352,31 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [jumpPicker, setJumpPicker] = useState('');
+  const [parseStatus, setParseStatus] = useState<{ pending: number; label: string } | null>(null);
   const pickerDataRef = useRef(pickerData);
   pickerDataRef.current = pickerData;
 
-  const handleFiles = useCallback((files: FileList) => {
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const data = e.target?.result;
-        if (!data) return;
-        const wb = XLSX.read(data, { type: 'array' });
+  // ── Web Worker: created once, reused for all file loads ──────────────────────
+  const workerRef = useRef<Worker | null>(null);
+  const pendingRef = useRef<{ total: number; done: number }>({ total: 0, done: 0 });
+
+  useEffect(() => {
+    const worker = new Worker(new URL('./parseWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent) => {
+      const { entries: rawEntries, fileName, sheetCount, error } = e.data as {
+        entries: Record<string, PickerDayRaw>;
+        fileName: string;
+        sheetCount: number;
+        fileIndex: number;
+        fileCount: number;
+        error?: string;
+      };
+
+      if (!error) {
         const now = new Date();
         const entries: Record<string, PickerDayData> = {};
-        for (const sheetName of wb.SheetNames) {
-          const parsed = parseSheet(wb.Sheets[sheetName], sheetName, now);
-          for (const [key, val] of Object.entries(parsed)) {
-            entries[key] = { ...val, loadedAt: now };
-          }
+        for (const [key, val] of Object.entries(rawEntries)) {
+          entries[key] = { ...val, date: new Date(val.dateISO), loadedAt: now };
         }
         const cur = pickerDataRef.current;
         let added = 0, replaced = 0;
@@ -1485,7 +1385,36 @@ export default function App() {
         }
         setPickerData(prev => ({ ...prev, ...entries }));
         setLastUpdated(now);
-        setFileHistory(h => [...h, { fileName: file.name, loadedAt: now, tabsLoaded: Object.keys(entries).length, recordsAdded: added, recordsReplaced: replaced }]);
+        setFileHistory(h => [...h, { fileName, loadedAt: now, tabsLoaded: sheetCount, recordsAdded: added, recordsReplaced: replaced }]);
+      }
+
+      pendingRef.current.done++;
+      if (pendingRef.current.done >= pendingRef.current.total) {
+        setParseStatus(null);
+      } else {
+        setParseStatus({ pending: pendingRef.current.total - pendingRef.current.done, label: 'Parsing…' });
+      }
+    };
+    workerRef.current = worker;
+    return () => worker.terminate();
+  }, []);
+
+  const handleFiles = useCallback((files: FileList) => {
+    const fileArr = Array.from(files);
+    pendingRef.current = { total: fileArr.length, done: 0 };
+    setParseStatus({ pending: fileArr.length, label: 'Reading file…' });
+
+    fileArr.forEach((file, fileIndex) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const buffer = e.target?.result as ArrayBuffer;
+        if (!buffer || !workerRef.current) return;
+        setParseStatus({ pending: pendingRef.current.total - pendingRef.current.done, label: `Parsing ${file.name}…` });
+        // Transfer the buffer (zero-copy) to the worker
+        workerRef.current.postMessage(
+          { buffer, fileName: file.name, fileIndex, fileCount: fileArr.length },
+          [buffer],
+        );
       };
       reader.readAsArrayBuffer(file);
     });
@@ -1521,8 +1450,20 @@ export default function App() {
       <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} hasData={hasData} dateRange={dateRange} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
-      {!hasData ? (
+      {parseStatus && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: 'rgba(18,18,28,0.96)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+          <div style={{ width: 18, height: 18, border: `2px solid ${AMBER}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: TEXT }}>{parseStatus.label}</span>
+        </div>
+      )}
+
+      {!hasData && !parseStatus ? (
         <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} />
+      ) : !hasData && parseStatus ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 60px)', flexDirection: 'column', gap: 16 }}>
+          <div style={{ width: 40, height: 40, border: `3px solid ${AMBER}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ color: DIM, fontSize: 14 }}>{parseStatus.label}</div>
+        </div>
       ) : (
         <>
           <TabBar activeTab={activeTab} setActiveTab={setActiveTab} gapCount={allGapFlags.length} />
