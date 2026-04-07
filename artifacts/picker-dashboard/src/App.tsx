@@ -792,9 +792,9 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
 
                 {/* Intro */}
                 <div style={{ fontSize: 12, color: DIM, lineHeight: 1.75, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '14px 16px' }}>
-                  The score is built from <strong style={{ color: TEXT }}>5 independent KPIs</strong> that together measure every important dimension of picking performance.
-                  Each KPI contributes a fixed number of points. Your score is simply the sum — no hidden weighting, no black box.
-                  The breakdown above tells you exactly where to focus to improve.
+                  This score is built on <strong style={{ color: TEXT }}>5 different indicators</strong> that together measure picking performance.
+                  Each indicator contributes a fixed number of points towards the score, which is simply the sum of all five.
+                  The breakdown above tells you exactly where to improve.
                 </div>
 
                 {/* One card per KPI */}
