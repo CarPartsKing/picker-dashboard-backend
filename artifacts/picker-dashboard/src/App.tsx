@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import type { Order, PickerDayRaw } from './parseUtils';
 import { toDateStr } from './parseUtils';
+import { fetchStats, uploadStats, type ApiDayStat, type UploadPayload } from './apiClient';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const BG   = '#060D1F';
@@ -2132,7 +2133,145 @@ function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump, pickerData }: {
   );
 }
 
-// ─── ROOT APP ─────────────────────────────────────────────────────────────────
+// ─── UPLOAD MODAL ─────────────────────────────────────────────────────────────
+function UploadModal({
+  fileName, statCount, password, setPassword,
+  uploading, error, result,
+  onSubmit, onDismiss,
+}: {
+  fileName: string; statCount: number;
+  password: string; setPassword: (v: string) => void;
+  uploading: boolean; error: string | null;
+  result: { rowsInserted: number; rowsSkipped: number } | null;
+  onSubmit: () => void; onDismiss: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)' }}>
+      <div style={{ ...glass, padding: 32, maxWidth: 420, width: '100%', margin: '0 16px' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 6 }}>Save to Team Database</div>
+        <div style={{ fontSize: 13, color: DIM, marginBottom: 20, lineHeight: 1.6 }}>
+          Parsed <span style={{ color: AMBER, fontWeight: 600, ...mono }}>{statCount}</span> picker-day{statCount !== 1 ? 's' : ''} from <span style={{ color: AMBER, ...mono }}>{fileName}</span>.
+          Enter the upload password to save these to the shared database.
+        </div>
+
+        {!result ? (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Upload Password</div>
+              <input
+                ref={inputRef}
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !uploading) onSubmit(); }}
+                placeholder="Enter password…"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${error ? 'rgba(255,69,58,0.6)' : 'rgba(255,255,255,0.15)'}`, background: 'rgba(255,255,255,0.05)', color: TEXT, fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+              />
+              {error && <div style={{ fontSize: 12, color: RED, marginTop: 6 }}>{error}</div>}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={onSubmit}
+                disabled={uploading || !password}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: uploading || !password ? 'rgba(232,25,44,0.4)' : BRAND, color: '#fff', fontSize: 13, fontWeight: 600, cursor: uploading || !password ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {uploading && <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
+                {uploading ? 'Saving…' : 'Save to Database'}
+              </button>
+              <button
+                onClick={onDismiss}
+                disabled={uploading}
+                style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: DIM, fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+              >
+                Skip
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ ...card, padding: 18, marginBottom: 20, background: 'rgba(48,209,88,0.07)', border: '1px solid rgba(48,209,88,0.25)' }}>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: GREEN, ...mono }}>{result.rowsInserted}</div>
+                  <div style={{ fontSize: 10, color: DIM, textTransform: 'uppercase', letterSpacing: '0.09em' }}>Saved</div>
+                </div>
+                {result.rowsSkipped > 0 && (
+                  <>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.08)' }} />
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 700, color: YELLOW, ...mono }}>{result.rowsSkipped}</div>
+                      <div style={{ fontSize: 10, color: DIM, textTransform: 'uppercase', letterSpacing: '0.09em' }}>Already existed</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <button onClick={onDismiss} style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: BRAND, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Done
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── DATE FILTER BAR ──────────────────────────────────────────────────────────
+function DateFilterBar({
+  dateFilter, setDateFilter, allDates,
+}: {
+  dateFilter: { from: string; to: string };
+  setDateFilter: (f: { from: string; to: string }) => void;
+  allDates: string[];
+}) {
+  const today = toDateStr(new Date());
+  const last30 = toDateStr(new Date(Date.now() - 29 * 86400000));
+  const last90 = toDateStr(new Date(Date.now() - 89 * 86400000));
+  const isAll = !dateFilter.from && !dateFilter.to;
+  const is30 = dateFilter.from === last30 && !dateFilter.to;
+  const is90 = dateFilter.from === last90 && !dateFilter.to;
+  const btnStyle = (active: boolean): React.CSSProperties => ({
+    padding: '4px 12px', borderRadius: 14, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+    border: `1px solid ${active ? AMBER : 'rgba(255,255,255,0.1)'}`,
+    background: active ? 'rgba(56,189,248,0.14)' : 'transparent',
+    color: active ? AMBER : DIM, fontFamily: 'inherit', letterSpacing: '0.02em',
+  });
+  return (
+    <div style={{ padding: '8px 28px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(6,13,31,0.7)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', marginRight: 4 }}>Filter</span>
+      <button style={btnStyle(isAll)} onClick={() => setDateFilter({ from: '', to: '' })}>All time</button>
+      <button style={btnStyle(is30)} onClick={() => setDateFilter({ from: last30, to: '' })}>Last 30 d</button>
+      <button style={btnStyle(is90)} onClick={() => setDateFilter({ from: last90, to: '' })}>Last 90 d</button>
+      <span style={{ color: 'rgba(255,255,255,0.12)', margin: '0 4px' }}>|</span>
+      <input
+        type="date"
+        value={dateFilter.from}
+        onChange={e => setDateFilter({ ...dateFilter, from: e.target.value })}
+        max={today}
+        style={{ padding: '3px 8px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: dateFilter.from ? AMBER : DIM, fontSize: 11, fontFamily: 'inherit', colorScheme: 'dark' }}
+      />
+      <span style={{ color: DIM, fontSize: 10 }}>→</span>
+      <input
+        type="date"
+        value={dateFilter.to}
+        onChange={e => setDateFilter({ ...dateFilter, to: e.target.value })}
+        max={today}
+        style={{ padding: '3px 8px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: dateFilter.to ? AMBER : DIM, fontSize: 11, fontFamily: 'inherit', colorScheme: 'dark' }}
+      />
+      {(dateFilter.from || dateFilter.to) && (
+        <button onClick={() => setDateFilter({ from: '', to: '' })} style={{ fontSize: 10, color: DIM, background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 6 }}>✕ Clear</button>
+      )}
+      {allDates.length > 0 && (
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: DIM }}>
+          {allDates.length} day{allDates.length !== 1 ? 's' : ''} in view
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [pickerData, setPickerData] = useState<Record<string, PickerDayData>>({});
   const [fileHistory, setFileHistory] = useState<FileHistoryEntry[]>([]);
@@ -2144,6 +2283,80 @@ export default function App() {
   const [parseStatus, setParseStatus] = useState<{ pending: number; label: string } | null>(null);
   const pickerDataRef = useRef(pickerData);
   pickerDataRef.current = pickerData;
+
+  // ── API state ─────────────────────────────────────────────────────────────────
+  const [apiStats, setApiStats] = useState<ApiDayStat[] | null>(null);
+  const [apiLoading, setApiLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: '', to: '' });
+
+  // Upload modal state
+  const [uploadModal, setUploadModal] = useState<{
+    open: boolean; parsedStats: DayStats[]; fileName: string;
+    dateRangeStart: string; dateRangeEnd: string;
+  }>({ open: false, parsedStats: [], fileName: '', dateRangeStart: '', dateRangeEnd: '' });
+  const [uploadPassword, setUploadPassword] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ rowsInserted: number; rowsSkipped: number } | null>(null);
+
+  // ── Load stats from API on mount ──────────────────────────────────────────────
+  const refreshApiStats = useCallback(async () => {
+    try {
+      const rows = await fetchStats();
+      setApiStats(rows);
+    } catch {
+      setApiStats([]);
+    } finally {
+      setApiLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { refreshApiStats(); }, [refreshApiStats]);
+
+  // ── Upload handler ────────────────────────────────────────────────────────────
+  const handleUploadSubmit = useCallback(async () => {
+    if (!uploadPassword || uploading) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const payload: UploadPayload = {
+        fileName: uploadModal.fileName,
+        dateRangeStart: uploadModal.dateRangeStart,
+        dateRangeEnd: uploadModal.dateRangeEnd,
+        stats: uploadModal.parsedStats.map(s => ({
+          pickerName: s.pickerName,
+          dateStr: s.dateStr,
+          totalLines: s.totalLines,
+          totalOrders: s.totalOrders,
+          linesPerHour: s.linesPerHour,
+          ordersPerHour: s.ordersPerHour,
+          avgLinesPerOrder: s.avgLinesPerOrder,
+          activeWindowMinutes: s.activeWindowMinutes,
+          gapFlags: s.gapFlags,
+          performanceRating: s.performanceRating,
+        })),
+      };
+      const result = await uploadStats(payload, uploadPassword);
+      setUploadResult(result);
+      await refreshApiStats();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'WRONG_PASSWORD') {
+        setUploadError('Incorrect password. Please try again.');
+      } else {
+        setUploadError(msg || 'Upload failed. Please try again.');
+      }
+    } finally {
+      setUploading(false);
+    }
+  }, [uploadPassword, uploading, uploadModal, refreshApiStats]);
+
+  const handleUploadDismiss = useCallback(() => {
+    setUploadModal(m => ({ ...m, open: false }));
+    setUploadPassword('');
+    setUploadError(null);
+    setUploadResult(null);
+  }, []);
 
   // ── Web Worker: created once, reused for all file loads ──────────────────────
   const workerRef = useRef<Worker | null>(null);
@@ -2175,6 +2388,22 @@ export default function App() {
         setPickerData(prev => ({ ...prev, ...entries }));
         setLastUpdated(now);
         setFileHistory(h => [...h, { fileName, loadedAt: now, tabsLoaded: sheetCount, recordsAdded: added, recordsReplaced: replaced }]);
+
+        // Compute DayStats for the just-parsed entries and open upload modal
+        const newStats = Object.values(entries).map(computeDayStats);
+        if (newStats.length > 0) {
+          const datestrs = newStats.map(s => s.dateStr).sort();
+          setUploadResult(null);
+          setUploadError(null);
+          setUploadPassword('');
+          setUploadModal({
+            open: true,
+            parsedStats: newStats,
+            fileName,
+            dateRangeStart: datestrs[0],
+            dateRangeEnd: datestrs[datestrs.length - 1],
+          });
+        }
       }
 
       pendingRef.current.done++;
@@ -2212,10 +2441,38 @@ export default function App() {
   const handleClear = useCallback(() => {
     setPickerData({}); setFileHistory([]); setLastUpdated(null);
     setActiveTab('overview'); setShowHistory(false); setJumpPicker('');
+    // apiStats intentionally preserved — it's server-side persistent data
   }, []);
 
   const { allStats, allDates, pickerNames, allGapFlags } = useMemo(() => {
-    const statsArr = Object.values(pickerData).map(computeDayStats);
+    // Local stats from current-session XLSX parse
+    const localStats = Object.values(pickerData).map(computeDayStats);
+
+    // Merge with API stats — local takes precedence for same picker+date
+    const localKeys = new Set(localStats.map(s => `${s.pickerName}|${s.dateStr}`));
+    const apiRows = (apiStats ?? []).filter(s => !localKeys.has(`${s.pickerName}|${s.dateStr}`));
+    const apiMapped: DayStats[] = apiRows.map(s => ({
+      pickerName: s.pickerName,
+      dateStr: s.dateStr,
+      date: new Date(s.dateStr + 'T12:00:00'),
+      totalOrders: s.totalOrders,
+      totalLines: s.totalLines,
+      linesPerHour: s.linesPerHour,
+      ordersPerHour: s.ordersPerHour,
+      avgLinesPerOrder: s.avgLinesPerOrder ?? 0,
+      activeWindowMinutes: s.activeWindowMinutes,
+      firstTime: null,
+      lastTime: null,
+      gapFlags: (s.gapFlags ?? []) as GapFlag[],
+      performanceRating: (s.performanceRating ?? undefined) as 'green' | 'yellow' | 'red' | undefined,
+    }));
+
+    let statsArr = [...apiMapped, ...localStats];
+
+    // Apply date filter
+    if (dateFilter.from) statsArr = statsArr.filter(s => s.dateStr >= dateFilter.from);
+    if (dateFilter.to) statsArr = statsArr.filter(s => s.dateStr <= dateFilter.to);
+
     const byDate = new Map<string, DayStats[]>();
     for (const s of statsArr) {
       if (!byDate.has(s.dateStr)) byDate.set(s.dateStr, []);
@@ -2226,7 +2483,7 @@ export default function App() {
     const pickers = [...new Set(statsArr.map(s => s.pickerName))].sort();
     const gaps = statsArr.flatMap(s => s.gapFlags);
     return { allStats: statsArr, allDates: dates, pickerNames: pickers, allGapFlags: gaps };
-  }, [pickerData]);
+  }, [pickerData, apiStats, dateFilter]);
 
   const hasData = allStats.length > 0;
 
@@ -2236,6 +2493,20 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: "-apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", color: TEXT, fontSize: 13 }}>
+      {uploadModal.open && (
+        <UploadModal
+          fileName={uploadModal.fileName}
+          statCount={uploadModal.parsedStats.length}
+          password={uploadPassword}
+          setPassword={setUploadPassword}
+          uploading={uploading}
+          error={uploadError}
+          result={uploadResult}
+          onSubmit={handleUploadSubmit}
+          onDismiss={handleUploadDismiss}
+        />
+      )}
+
       <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} hasData={hasData} dateRange={dateRange} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
@@ -2246,8 +2517,20 @@ export default function App() {
         </div>
       )}
 
-      {!hasData && !parseStatus ? (
-        <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} />
+      {apiLoading && !hasData ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 60px)', flexDirection: 'column', gap: 16 }}>
+          <div style={{ width: 36, height: 36, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ color: DIM, fontSize: 13 }}>Loading team data…</div>
+        </div>
+      ) : !hasData && !parseStatus ? (
+        <>
+          {apiStats !== null && apiStats.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 0 0', color: DIM, fontSize: 12 }}>
+              No data in database yet — upload your first file below.
+            </div>
+          )}
+          <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} />
+        </>
       ) : !hasData && parseStatus ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 60px)', flexDirection: 'column', gap: 16 }}>
           <div style={{ width: 40, height: 40, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -2257,6 +2540,7 @@ export default function App() {
         <>
           <TabBar activeTab={activeTab} setActiveTab={setActiveTab} gapCount={allGapFlags.length} />
           <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} compact />
+          <DateFilterBar dateFilter={dateFilter} setDateFilter={setDateFilter} allDates={allDates} />
 
           {activeTab === 'overview'      && <OverviewTab allStats={allStats} allDates={allDates} pickerNames={pickerNames} allGapFlags={allGapFlags} pickerData={pickerData} />}
           {activeTab === 'score'         && <ScoreTab allStats={allStats} allGapFlags={allGapFlags} pickerNames={pickerNames} pickerData={pickerData} />}
