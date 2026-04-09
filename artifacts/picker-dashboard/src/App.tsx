@@ -562,7 +562,7 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
       >
         <input ref={inputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: 'none' }} onChange={e => e.target.files && onFiles(e.target.files)} />
         <div style={{ fontSize: 44, marginBottom: 18, opacity: 0.9 }}>📊</div>
-        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 10, color: isDragging ? BRAND : TEXT, letterSpacing: '-0.01em' }}>Drop your Excel file here</div>
+        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 10, color: isDragging ? BRAND : TEXT, letterSpacing: '-0.01em' }}>Upload your file here</div>
         <div style={{ fontSize: 13, color: DIM, marginBottom: 28, lineHeight: 1.7 }}>
           Date-named tabs (412026, 4102026…)<br />Wide format: Order · Lines · Time repeating per picker
         </div>
