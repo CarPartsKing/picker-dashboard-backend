@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import type { Order, PickerDayRaw } from './parseUtils';
 import { toDateStr } from './parseUtils';
-import { fetchStats, uploadStats, type ApiDayStat, type UploadPayload } from './apiClient';
+import { fetchStats, uploadStats, clearAllStats, type ApiDayStat, type UploadPayload } from './apiClient';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const BG   = '#060D1F';
@@ -471,8 +471,9 @@ const DarkTip = ({ active, payload, label }: { active?: boolean; payload?: { col
 };
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
-  lastUpdated: Date | null; onClear: () => void; onToggleHistory: () => void; hasData: boolean;
+function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dateRange }: {
+  lastUpdated: Date | null; onClear: () => void; onToggleHistory: () => void;
+  onClearDb: () => void; hasData: boolean;
   dateRange: { first: string; last: string; days: number } | null;
 }) {
   return (
@@ -497,7 +498,8 @@ function Header({ lastUpdated, onClear, onToggleHistory, hasData, dateRange }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {lastUpdated && <span style={{ fontSize: 11, color: DIM, ...mono }}>{lastUpdated.toLocaleTimeString()}</span>}
         {hasData && btn('History', onToggleHistory)}
-        {hasData && btn('Clear', onClear, { color: RED, borderColor: 'rgba(255,69,58,0.35)', background: 'rgba(255,69,58,0.08)' })}
+        {hasData && btn('Clear local', onClear)}
+        {hasData && btn('Clear DB', onClearDb, { color: RED, borderColor: 'rgba(255,69,58,0.35)', background: 'rgba(255,69,58,0.08)' })}
       </div>
     </div>
   );
@@ -2133,6 +2135,60 @@ function GapFlagsTab({ allGapFlags, setActiveTab, onPickerJump, pickerData }: {
   );
 }
 
+// ─── CLEAR DATABASE MODAL ─────────────────────────────────────────────────────
+function ClearDbModal({
+  password, setPassword, clearing, error,
+  onConfirm, onDismiss,
+}: {
+  password: string; setPassword: (v: string) => void;
+  clearing: boolean; error: string | null;
+  onConfirm: () => void; onDismiss: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)' }}>
+      <div style={{ ...glass, padding: 32, maxWidth: 400, width: '100%', margin: '0 16px', border: '1px solid rgba(255,69,58,0.3)' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: RED, marginBottom: 6 }}>Clear All Database Records</div>
+        <div style={{ fontSize: 13, color: DIM, marginBottom: 20, lineHeight: 1.6 }}>
+          This will permanently delete <strong style={{ color: TEXT }}>all saved picker stats and upload history</strong> from the database. This cannot be undone.
+          <br /><br />
+          Enter the upload password to confirm.
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <input
+            ref={inputRef}
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !clearing) onConfirm(); }}
+            placeholder="Enter password to confirm…"
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${error ? 'rgba(255,69,58,0.6)' : 'rgba(255,69,58,0.35)'}`, background: 'rgba(255,69,58,0.05)', color: TEXT, fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+          />
+          {error && <div style={{ fontSize: 12, color: RED, marginTop: 6 }}>{error}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={onConfirm}
+            disabled={clearing || !password}
+            style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: clearing || !password ? 'rgba(255,69,58,0.3)' : RED, color: '#fff', fontSize: 13, fontWeight: 600, cursor: clearing || !password ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
+            {clearing && <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
+            {clearing ? 'Clearing…' : 'Clear All Data'}
+          </button>
+          <button
+            onClick={onDismiss}
+            disabled={clearing}
+            style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: DIM, fontSize: 13, cursor: clearing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── UPLOAD MODAL ─────────────────────────────────────────────────────────────
 function UploadModal({
   fileName, statCount, password, setPassword,
@@ -2358,6 +2414,38 @@ export default function App() {
     setUploadResult(null);
   }, []);
 
+  // ── Clear database state + handlers ──────────────────────────────────────────
+  const [clearDbOpen, setClearDbOpen] = useState(false);
+  const [clearDbPassword, setClearDbPassword] = useState('');
+  const [clearDbError, setClearDbError] = useState<string | null>(null);
+  const [clearDbLoading, setClearDbLoading] = useState(false);
+
+  const handleClearDbConfirm = useCallback(async () => {
+    if (!clearDbPassword || clearDbLoading) return;
+    setClearDbLoading(true);
+    setClearDbError(null);
+    try {
+      await clearAllStats(clearDbPassword);
+      setApiStats([]);
+      setPickerData({});
+      setFileHistory([]);
+      setLastUpdated(null);
+      setClearDbOpen(false);
+      setClearDbPassword('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setClearDbError(msg === 'WRONG_PASSWORD' ? 'Incorrect password.' : (msg || 'Clear failed.'));
+    } finally {
+      setClearDbLoading(false);
+    }
+  }, [clearDbPassword, clearDbLoading]);
+
+  const handleClearDbDismiss = useCallback(() => {
+    setClearDbOpen(false);
+    setClearDbPassword('');
+    setClearDbError(null);
+  }, []);
+
   // ── Web Worker: created once, reused for all file loads ──────────────────────
   const workerRef = useRef<Worker | null>(null);
   const pendingRef = useRef<{ total: number; done: number }>({ total: 0, done: 0 });
@@ -2493,6 +2581,17 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: "-apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", color: TEXT, fontSize: 13 }}>
+      {clearDbOpen && (
+        <ClearDbModal
+          password={clearDbPassword}
+          setPassword={setClearDbPassword}
+          clearing={clearDbLoading}
+          error={clearDbError}
+          onConfirm={handleClearDbConfirm}
+          onDismiss={handleClearDbDismiss}
+        />
+      )}
+
       {uploadModal.open && (
         <UploadModal
           fileName={uploadModal.fileName}
@@ -2507,7 +2606,7 @@ export default function App() {
         />
       )}
 
-      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} hasData={hasData} dateRange={dateRange} />
+      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} onClearDb={() => setClearDbOpen(true)} hasData={hasData} dateRange={dateRange} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
       {parseStatus && (

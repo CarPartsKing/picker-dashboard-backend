@@ -93,3 +93,15 @@ export async function fetchUploads(): Promise<ApiUploadRecord[]> {
   if (!res.ok) throw new Error(`Failed to fetch uploads: ${res.status}`);
   return res.json();
 }
+
+export async function clearAllStats(password: string): Promise<void> {
+  const res = await apiFetch("/dashboard/stats", {
+    method: "DELETE",
+    headers: { "x-upload-password": password },
+  });
+  if (res.status === 401) throw new Error("WRONG_PASSWORD");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? `Clear failed: ${res.status}`);
+  }
+}

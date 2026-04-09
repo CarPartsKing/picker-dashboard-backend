@@ -115,4 +115,13 @@ router.get("/dashboard/uploads", async (_req: Request, res: Response): Promise<v
   res.json(rows);
 });
 
+router.delete("/dashboard/stats", async (req: Request, res: Response): Promise<void> => {
+  if (!checkPassword(req, res)) return;
+
+  await db.delete(dashboardStatsTable);
+  await db.delete(dashboardUploadsTable);
+
+  res.json({ cleared: true });
+});
+
 export default router;
