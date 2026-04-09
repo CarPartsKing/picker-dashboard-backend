@@ -480,7 +480,7 @@ function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dat
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(8,8,15,0.75)', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em', color: TEXT }}>
-          Pick<span style={{ color: BRAND }}> Track</span>
+          Warehouse Pick<span style={{ color: BRAND }}> Tracker</span>
         </span>
         {dateRange && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.22)', borderRadius: 20, padding: '3px 12px' }}>
