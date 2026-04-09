@@ -1174,17 +1174,6 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
     return { week: weekLabel(wk), lines: ws.reduce((s, d) => s + d.totalLines, 0), orders: ws.reduce((s, d) => s + d.totalOrders, 0) };
   });
 
-  const tableData = weeks.map(wk => {
-    const ws = weekMap.get(wk)!;
-    const row: Record<string, string | number | null> = { week: weekLabel(wk) };
-    for (const name of pickerNames) {
-      const days = ws.filter(s => s.pickerName === name);
-      row[`${name}_lines`] = days.reduce((s, d) => s + d.totalLines, 0) || null;
-      const lphDays = days.filter(s => s.linesPerHour != null);
-      row[`${name}_lph`] = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : null;
-    }
-    return row;
-  });
 
   return (
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
@@ -1350,41 +1339,6 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
         );
       })()}
 
-      <div style={{ ...section }}>
-        <div style={secTitle}>Per-Picker Weekly Rollup</div>
-        <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
-          <table style={tbl}>
-            <thead>
-              <tr>
-                <th style={th}>Week</th>
-                {pickerNames.map(n => <th key={n} style={th} colSpan={2}>{n}</th>)}
-              </tr>
-              <tr>
-                <th style={{ ...th, borderTop: 'none' }} />
-                {pickerNames.map(n => (
-                  <React.Fragment key={n}>
-                    <th style={{ ...th, borderTop: 'none', fontSize: 9 }}>Lines</th>
-                    <th style={{ ...th, borderTop: 'none', fontSize: 9 }}>L/Hr</th>
-                  </React.Fragment>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tableData.map((row, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
-                  <td style={{ ...td, ...mono, fontSize: 11 }}>{row.week}</td>
-                  {pickerNames.map(n => (
-                    <React.Fragment key={n}>
-                      <td style={{ ...td, ...mono }}>{row[`${n}_lines`] != null ? row[`${n}_lines`] : <span style={{ color: DIM }}>—</span>}</td>
-                      <td style={{ ...td, ...mono, color: DIM }}>{row[`${n}_lph`] != null ? (row[`${n}_lph`] as number).toFixed(1) : '—'}</td>
-                    </React.Fragment>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
