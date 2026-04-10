@@ -872,6 +872,274 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
   );
 }
 
+// ─── INSIGHTS TAB — LAYER 1 ML ────────────────────────────────────────────────
+function InsightsTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerNames: string[] }) {
+
+  // ── 1. Anomaly Detection ────────────────────────────────────────────────────
+  const anomalies = useMemo(() => {
+    const byPicker = new Map<string, DayStats[]>();
+    for (const s of allStats) {
+      if (!byPicker.has(s.pickerName)) byPicker.set(s.pickerName, []);
+      byPicker.get(s.pickerName)!.push(s);
+    }
+    const out: Array<{ picker: string; dateStr: string; lph: number; mean: number; pctBelow: number; zScore: number; level: 'warning' | 'critical' }> = [];
+    for (const [picker, days] of byPicker.entries()) {
+      const lphDays = days.filter(d => d.linesPerHour != null && d.linesPerHour > 0);
+      if (lphDays.length < 3) continue;
+      const mean = lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length;
+      const variance = lphDays.reduce((s, d) => s + Math.pow(d.linesPerHour! - mean, 2), 0) / lphDays.length;
+      const stddev = Math.sqrt(variance);
+      if (stddev < 0.5) continue;
+      for (const day of lphDays) {
+        const z = (day.linesPerHour! - mean) / stddev;
+        if (z < -1.5) {
+          out.push({ picker, dateStr: day.dateStr, lph: day.linesPerHour!, mean, pctBelow: ((mean - day.linesPerHour!) / mean) * 100, zScore: z, level: z < -2.5 ? 'critical' : 'warning' });
+        }
+      }
+    }
+    return out.sort((a, b) => b.dateStr.localeCompare(a.dateStr)).slice(0, 20);
+  }, [allStats]);
+
+  // ── 2. Team Trend Forecast ──────────────────────────────────────────────────
+  const trend = useMemo(() => {
+    const byDate = new Map<string, number>();
+    for (const s of allStats) byDate.set(s.dateStr, (byDate.get(s.dateStr) ?? 0) + s.totalLines);
+    const points = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    if (points.length < 3) return null;
+    const n = points.length;
+    const ys = points.map(p => p[1]);
+    const sumX = (n * (n - 1)) / 2;
+    const sumY = ys.reduce((s, y) => s + y, 0);
+    const sumXY = ys.reduce((s, y, i) => s + i * y, 0);
+    const sumX2 = Array.from({ length: n }, (_, i) => i * i).reduce((s, x) => s + x, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    const lastDate = new Date(points[n - 1][0] + 'T12:00:00');
+    const chartPoints: Array<{ date: string; actual?: number; trend: number }> = points.map((p, i) => ({
+      date: fmtDate(p[0]), actual: p[1], trend: Math.max(0, Math.round(intercept + slope * i)),
+    }));
+    for (let f = 1; f <= 7; f++) {
+      const d = new Date(lastDate);
+      d.setDate(d.getDate() + f);
+      chartPoints.push({ date: fmtDate(d.toISOString().slice(0, 10)), trend: Math.max(0, Math.round(intercept + slope * (n - 1 + f))) });
+    }
+    const weeklyChange = n >= 8
+      ? ys.slice(-7).reduce((s, v) => s + v, 0) / 7 - ys.slice(-14, -7).reduce((s, v) => s + v, 0) / 7
+      : null;
+    return { slope, chartPoints, weeklyChange, projectedNext: Math.max(0, Math.round(intercept + slope * n)) };
+  }, [allStats]);
+
+  // ── 3. Fatigue / Recurring Gap Patterns ────────────────────────────────────
+  const fatiguePatterns = useMemo(() => {
+    const byPicker = new Map<string, DayStats[]>();
+    for (const s of allStats) {
+      if (!byPicker.has(s.pickerName)) byPicker.set(s.pickerName, []);
+      byPicker.get(s.pickerName)!.push(s);
+    }
+    const out: Array<{ picker: string; window: string; count: number; pct: number; daysTracked: number }> = [];
+    for (const [picker, days] of byPicker.entries()) {
+      if (days.length < 2) continue;
+      const counts: Record<string, number> = { 'Early shift (0–2h)': 0, 'Mid shift (2–4h)': 0, 'Late shift (4h+)': 0 };
+      let daysWithGaps = 0;
+      for (const day of days) {
+        const signif = day.gapFlags.filter(g => g.severity === 'High' || g.severity === 'Med');
+        if (!signif.length) continue;
+        daysWithGaps++;
+        for (const gap of signif) {
+          const mid = (gap.fromMinutes + gap.toMinutes) / 2;
+          if (mid < 120) counts['Early shift (0–2h)']++;
+          else if (mid < 240) counts['Mid shift (2–4h)']++;
+          else counts['Late shift (4h+)']++;
+        }
+      }
+      if (daysWithGaps < 2) continue;
+      const total = Object.values(counts).reduce((s, v) => s + v, 0);
+      if (!total) continue;
+      const [topWindow, topCount] = Object.entries(counts).reduce((a, b) => b[1] > a[1] ? b : a);
+      if (topCount >= 2 && topCount / total >= 0.55) {
+        out.push({ picker, window: topWindow, count: topCount, pct: topCount / total, daysTracked: days.length });
+      }
+    }
+    return out.sort((a, b) => b.pct - a.pct);
+  }, [allStats]);
+
+  // ── 4. Consistency Index ────────────────────────────────────────────────────
+  const consistency = useMemo(() => {
+    const byPicker = new Map<string, DayStats[]>();
+    for (const s of allStats) {
+      if (!byPicker.has(s.pickerName)) byPicker.set(s.pickerName, []);
+      byPicker.get(s.pickerName)!.push(s);
+    }
+    const out: Array<{ picker: string; cv: number; mean: number; stddev: number; days: number; rating: string }> = [];
+    for (const [picker, days] of byPicker.entries()) {
+      const lphDays = days.filter(d => d.linesPerHour != null && d.linesPerHour > 0);
+      if (lphDays.length < 3) continue;
+      const mean = lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length;
+      const variance = lphDays.reduce((s, d) => s + Math.pow(d.linesPerHour! - mean, 2), 0) / lphDays.length;
+      const stddev = Math.sqrt(variance);
+      const cv = stddev / mean;
+      out.push({ picker, cv, mean, stddev, days: lphDays.length, rating: cv < 0.1 ? 'Very Consistent' : cv < 0.2 ? 'Consistent' : cv < 0.3 ? 'Variable' : 'Highly Variable' });
+    }
+    return out.sort((a, b) => a.cv - b.cv);
+  }, [allStats]);
+
+  if (allStats.length === 0) return (
+    <div style={{ padding: 60, textAlign: 'center', color: DIM }}>Load picker data to see ML insights.</div>
+  );
+
+  const needMoreData = allStats.length < 9;
+
+  return (
+    <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+
+      {/* header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, marginBottom: 4, letterSpacing: '-0.01em' }}>ML Insights</div>
+        <div style={{ fontSize: 12, color: DIM }}>
+          Statistical analysis on {allStats.length} picker-days across {pickerNames.length} picker{pickerNames.length !== 1 ? 's' : ''}.{' '}
+          {needMoreData && <span style={{ color: YELLOW }}>⚠ More days = higher accuracy — keep uploading data.</span>}
+        </div>
+      </div>
+
+      {/* ── Team Trend Forecast ── */}
+      <div style={section}>
+        <div style={secTitle}>Team Output Trend &amp; 7-Day Forecast</div>
+        {!trend ? (
+          <div style={{ color: DIM, fontSize: 13 }}>Need at least 3 days of team data for trend analysis.</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div style={{ ...card, flex: '1 1 160px', padding: '14px 20px' }}>
+                <div style={{ fontSize: 10, color: DIM, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Direction</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: trend.slope > 2 ? GREEN : trend.slope < -2 ? RED : AMBER }}>
+                  {trend.slope > 2 ? '↑ Improving' : trend.slope < -2 ? '↓ Declining' : '→ Stable'}
+                </div>
+                <div style={{ fontSize: 11, color: DIM, marginTop: 4 }}>{Math.abs(trend.slope).toFixed(1)} lines/day {trend.slope >= 0 ? 'gain' : 'loss'}</div>
+              </div>
+              {trend.weeklyChange != null && (
+                <div style={{ ...card, flex: '1 1 160px', padding: '14px 20px' }}>
+                  <div style={{ fontSize: 10, color: DIM, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Week-on-Week Avg</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: trend.weeklyChange > 0 ? GREEN : RED }}>
+                    {trend.weeklyChange > 0 ? '+' : ''}{trend.weeklyChange.toFixed(0)} L/day
+                  </div>
+                  <div style={{ fontSize: 11, color: DIM, marginTop: 4 }}>vs prior 7 days</div>
+                </div>
+              )}
+              <div style={{ ...card, flex: '1 1 160px', padding: '14px 20px' }}>
+                <div style={{ fontSize: 10, color: DIM, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>7-Day Projection</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: AMBER }}>{trend.projectedNext.toLocaleString()}</div>
+                <div style={{ fontSize: 11, color: DIM, marginTop: 4 }}>lines/day forecast</div>
+              </div>
+            </div>
+            <div style={{ ...card, padding: '16px 0 8px 0' }}>
+              <div style={{ fontSize: 10, color: DIM, paddingLeft: 18, marginBottom: 4 }}>
+                <span style={{ color: AMBER }}>━</span> Actual &nbsp; <span style={{ color: BRAND }}>╌</span> Regression trend + 7-day forecast
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={trend.chartPoints} margin={{ left: 10, right: 20, top: 4, bottom: 50 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                  <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 9 }} angle={-30} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: DIM, fontSize: 10 }} />
+                  <Tooltip content={<DarkTip />} />
+                  <Line type="monotone" dataKey="actual" name="Actual Lines" stroke={AMBER} strokeWidth={2} dot={{ r: 3, fill: AMBER }} connectNulls={false} />
+                  <Line type="monotone" dataKey="trend" name="Trend / Forecast" stroke={BRAND} strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Anomaly Detection ── */}
+      <div style={section}>
+        <div style={secTitle}>Performance Anomalies</div>
+        <div style={{ fontSize: 12, color: DIM, marginBottom: 14 }}>
+          Days where a picker's L/Hr fell ≥1.5 standard deviations below their own personal baseline. Requires ≥3 days per picker.
+        </div>
+        {anomalies.length === 0 ? (
+          <div style={{ ...card, padding: '18px 22px', color: GREEN, fontSize: 13 }}>
+            ✓ No significant anomalies detected — all pickers are performing within normal range.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {anomalies.map((a, i) => (
+              <div key={i} style={{ ...card, padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderLeft: `3px solid ${a.level === 'critical' ? RED : YELLOW}` }}>
+                <div style={{ minWidth: 100, fontWeight: 600, fontSize: 13 }}>{a.picker}</div>
+                <div style={{ ...mono, fontSize: 11, color: DIM, minWidth: 90 }}>{fmtDate(a.dateStr)}</div>
+                <div style={{ flex: 1, display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ ...mono, fontSize: 14, color: a.level === 'critical' ? RED : YELLOW, fontWeight: 700 }}>{a.lph.toFixed(1)} L/Hr</span>
+                  <span style={{ fontSize: 11, color: DIM }}>baseline <span style={{ color: TEXT, ...mono }}>{a.mean.toFixed(1)}</span></span>
+                  <span style={{ fontSize: 11 }}><span style={{ color: a.level === 'critical' ? RED : YELLOW }}>{a.pctBelow.toFixed(0)}% below</span><span style={{ color: DIM }}> normal · z={a.zScore.toFixed(2)}</span></span>
+                </div>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: a.level === 'critical' ? RED : YELLOW, border: `1px solid ${a.level === 'critical' ? 'rgba(255,69,58,0.35)' : 'rgba(255,214,10,0.35)'}`, borderRadius: 4, padding: '2px 8px' }}>
+                  {a.level === 'critical' ? 'Critical' : 'Warning'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Fatigue Pattern Detection ── */}
+      <div style={section}>
+        <div style={secTitle}>Recurring Gap Patterns</div>
+        <div style={{ fontSize: 12, color: DIM, marginBottom: 14 }}>
+          Detects whether a picker's significant gaps (Med/High) consistently cluster in the same shift window — a signal of recurring fatigue or scheduling pressure.
+        </div>
+        {fatiguePatterns.length === 0 ? (
+          <div style={{ ...card, padding: '18px 22px', color: GREEN, fontSize: 13 }}>
+            ✓ No recurring gap patterns detected across the team.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            {fatiguePatterns.map((p, i) => (
+              <div key={i} style={{ ...card, padding: '16px 20px', borderLeft: '3px solid rgba(255,159,10,0.7)' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{p.picker}</div>
+                <div style={{ fontSize: 13, color: YELLOW, marginBottom: 6 }}>{p.window}</div>
+                <div style={{ fontSize: 11, color: DIM }}>{p.count} significant gaps in this window</div>
+                <div style={{ fontSize: 11, color: DIM }}>{Math.round(p.pct * 100)}% of all their gaps · {p.daysTracked} days tracked</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Consistency Index ── */}
+      {consistency.length > 0 && (
+        <div style={section}>
+          <div style={secTitle}>Picker Consistency Index</div>
+          <div style={{ fontSize: 12, color: DIM, marginBottom: 14 }}>
+            Coefficient of Variation (CV) measures day-to-day stability. Lower CV = more predictable output. Requires ≥3 days per picker.
+          </div>
+          <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
+            <table style={tbl}>
+              <thead><tr>
+                {['Picker', 'Avg L/Hr', 'Std Dev', 'CV', 'Rating', 'Days'].map(h => <th key={h} style={th}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {consistency.map((row, i) => {
+                  const col = row.cv < 0.1 ? GREEN : row.cv < 0.2 ? AMBER : row.cv < 0.3 ? YELLOW : RED;
+                  return (
+                    <tr key={row.picker} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                      <td style={{ ...td, fontWeight: 600 }}>{row.picker}</td>
+                      <td style={{ ...td, ...mono }}>{row.mean.toFixed(1)}</td>
+                      <td style={{ ...td, ...mono, color: DIM }}>±{row.stddev.toFixed(1)}</td>
+                      <td style={{ ...td, ...mono, color: col, fontWeight: 600 }}>{(row.cv * 100).toFixed(1)}%</td>
+                      <td style={{ ...td, color: col }}>{row.rating}</td>
+                      <td style={{ ...td, ...mono, color: DIM }}>{row.days}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
 // ─── TAB BAR ─────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'overview',      label: 'Overview' },
@@ -880,6 +1148,7 @@ const TABS = [
   { id: 'compare',       label: 'Compare' },
   { id: 'score',         label: 'Score' },
   { id: 'gap-flags',     label: 'Gap Flags' },
+  { id: 'insights',      label: 'ML Insights' },
 ];
 function TabBar({ activeTab, setActiveTab, gapCount }: { activeTab: string; setActiveTab: (t: string) => void; gapCount: number }) {
   return (
@@ -2601,6 +2870,7 @@ export default function App() {
           {activeTab === 'compare'       && <CompareTab allStats={allStats} pickerNames={pickerNames} />}
           {activeTab === 'picker-detail' && <PickerDetailTab allStats={allStats} pickerNames={pickerNames} allDates={allDates} externalPicker={jumpPicker} pickerData={pickerData} />}
           {activeTab === 'gap-flags'     && <GapFlagsTab allGapFlags={allGapFlags} setActiveTab={setActiveTab} onPickerJump={setJumpPicker} pickerData={pickerData} />}
+          {activeTab === 'insights'      && <InsightsTab allStats={allStats} pickerNames={pickerNames} />}
         </>
       )}
     </div>
