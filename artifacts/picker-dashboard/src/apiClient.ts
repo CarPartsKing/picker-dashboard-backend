@@ -94,6 +94,39 @@ export async function fetchUploads(): Promise<ApiUploadRecord[]> {
   return res.json();
 }
 
+export interface LivePickerRecord {
+  id: number;
+  date: string;
+  picker: string;
+  orders: number;
+  total_lines: number;
+  avg_lines_per_order: number;
+  active_hrs: number | null;
+  lines_per_hr: number | null;
+  orders_per_hr: number | null;
+  first_time_mins: number | null;
+  last_time_mins: number | null;
+  has_gaps: boolean;
+  gaps: Array<{ fromMins: number; toMins: number; gapMins: number }>;
+  order_detail: unknown[];
+  exported_at: string;
+}
+
+export interface LivePickerResponse {
+  exportedAt: string;
+  recordCount: number;
+  data: LivePickerRecord[];
+}
+
+export async function fetchLivePickerData(): Promise<LivePickerResponse> {
+  const res = await apiFetch("/dashboard/live-data");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? `Live data fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function clearAllStats(password: string): Promise<void> {
   const res = await apiFetch("/dashboard/stats", {
     method: "DELETE",

@@ -124,4 +124,24 @@ router.delete("/dashboard/stats", async (req: Request, res: Response): Promise<v
   res.json({ cleared: true });
 });
 
+const EXTERNAL_API = "https://picker-dashboard-backend.onrender.com/api/picker-data";
+
+router.get("/dashboard/live-data", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const upstream = await fetch(EXTERNAL_API, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!upstream.ok) {
+      res.status(502).json({ error: `Upstream returned ${upstream.status}` });
+      return;
+    }
+    const body = await upstream.json() as unknown;
+    res.json(body);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: `Failed to reach upstream: ${msg}` });
+  }
+});
+
 export default router;

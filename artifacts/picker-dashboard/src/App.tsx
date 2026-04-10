@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import type { Order, PickerDayRaw } from './parseUtils';
 import { toDateStr } from './parseUtils';
-import { fetchStats, uploadStats, clearAllStats, type ApiDayStat, type UploadPayload } from './apiClient';
+import { fetchStats, uploadStats, clearAllStats, fetchLivePickerData, type ApiDayStat, type UploadPayload, type LivePickerRecord } from './apiClient';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const BG   = '#060D1F';
@@ -471,11 +471,16 @@ const DarkTip = ({ active, payload, label }: { active?: boolean; payload?: { col
 };
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dateRange }: {
+function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dateRange, liveLastUpdated, liveLoading, liveError }: {
   lastUpdated: Date | null; onClear: () => void; onToggleHistory: () => void;
   onClearDb: () => void; hasData: boolean;
   dateRange: { first: string; last: string; days: number } | null;
+  liveLastUpdated: string | null; liveLoading: boolean; liveError: string | null;
 }) {
+  const fmtLiveTs = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(8,8,15,0.75)', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -494,6 +499,22 @@ function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dat
             <span style={{ fontSize: 10, color: DIM }}>· {dateRange.days}d</span>
           </span>
         )}
+        {/* Live data status pill */}
+        {liveLoading ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: DIM, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '3px 10px' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', border: `1.5px solid ${AMBER}`, borderTopColor: 'transparent', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+            Fetching live data…
+          </span>
+        ) : liveError ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: YELLOW, background: 'rgba(255,214,10,0.08)', border: '1px solid rgba(255,214,10,0.25)', borderRadius: 20, padding: '3px 10px' }}>
+            ⚠ Live feed unavailable
+          </span>
+        ) : liveLastUpdated ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: GREEN, background: 'rgba(48,209,88,0.08)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 20, padding: '3px 10px' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN, display: 'inline-block' }} />
+            Live · {fmtLiveTs(liveLastUpdated)}
+          </span>
+        ) : null}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {lastUpdated && <span style={{ fontSize: 11, color: DIM, ...mono }}>{lastUpdated.toLocaleTimeString()}</span>}
@@ -2626,10 +2647,16 @@ export default function App() {
   const pickerDataRef = useRef(pickerData);
   pickerDataRef.current = pickerData;
 
-  // ── API state ─────────────────────────────────────────────────────────────────
+  // ── API state (our DB) ────────────────────────────────────────────────────────
   const [apiStats, setApiStats] = useState<ApiDayStat[] | null>(null);
   const [apiLoading, setApiLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: '', to: '' });
+
+  // ── Live data state (external Render backend) ─────────────────────────────────
+  const [liveStats, setLiveStats] = useState<DayStats[]>([]);
+  const [liveLastUpdated, setLiveLastUpdated] = useState<string | null>(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [liveError, setLiveError] = useState<string | null>(null);
 
   // Upload modal state
   const [uploadModal, setUploadModal] = useState<{
@@ -2640,6 +2667,34 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<{ rowsInserted: number; rowsSkipped: number } | null>(null);
+
+  // ── Convert LivePickerRecord → DayStats ───────────────────────────────────────
+  const liveRecordToDayStats = useCallback((r: LivePickerRecord): DayStats => {
+    const gapFlags: GapFlag[] = (r.gaps ?? [])
+      .filter(g => g.gapMins >= 60)
+      .map(g => ({
+        pickerName: r.picker,
+        dateStr: r.date,
+        fromMinutes: g.fromMins,
+        toMinutes: g.toMins,
+        gapMinutes: g.gapMins,
+        severity: g.gapMins >= 120 ? 'High' : g.gapMins >= 90 ? 'Med' : 'Low',
+      }));
+    return {
+      pickerName: r.picker,
+      dateStr: r.date,
+      date: new Date(r.date + 'T12:00:00'),
+      totalOrders: r.orders,
+      totalLines: r.total_lines,
+      linesPerHour: r.lines_per_hr,
+      ordersPerHour: r.orders_per_hr,
+      avgLinesPerOrder: r.avg_lines_per_order ?? 0,
+      activeWindowMinutes: r.active_hrs != null ? r.active_hrs * 60 : null,
+      firstTime: r.first_time_mins,
+      lastTime: r.last_time_mins,
+      gapFlags,
+    };
+  }, []);
 
   // ── Load stats from API on mount ──────────────────────────────────────────────
   const refreshApiStats = useCallback(async () => {
@@ -2653,7 +2708,26 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { refreshApiStats(); }, [refreshApiStats]);
+  // ── Load live data from Render backend ────────────────────────────────────────
+  const refreshLiveData = useCallback(async () => {
+    setLiveLoading(true);
+    setLiveError(null);
+    try {
+      const resp = await fetchLivePickerData();
+      setLiveStats(resp.data.map(liveRecordToDayStats));
+      setLiveLastUpdated(resp.exportedAt);
+    } catch (err: unknown) {
+      setLiveError(err instanceof Error ? err.message : String(err));
+      setLiveStats([]);
+    } finally {
+      setLiveLoading(false);
+    }
+  }, [liveRecordToDayStats]);
+
+  useEffect(() => {
+    refreshApiStats();
+    refreshLiveData();
+  }, [refreshApiStats, refreshLiveData]);
 
   // ── Upload handler ────────────────────────────────────────────────────────────
   const handleUploadSubmit = useCallback(async () => {
@@ -2819,12 +2893,16 @@ export default function App() {
   }, []);
 
   const { allStats, allDates, pickerNames, allGapFlags } = useMemo(() => {
-    // Local stats from current-session XLSX parse
+    // Local stats from current-session XLSX parse (highest priority)
     const localStats = Object.values(pickerData).map(computeDayStats);
-
-    // Merge with API stats — local takes precedence for same picker+date
     const localKeys = new Set(localStats.map(s => `${s.pickerName}|${s.dateStr}`));
-    const apiRows = (apiStats ?? []).filter(s => !localKeys.has(`${s.pickerName}|${s.dateStr}`));
+
+    // Live stats from external Render backend (2nd priority)
+    const liveFiltered = liveStats.filter(s => !localKeys.has(`${s.pickerName}|${s.dateStr}`));
+    const liveKeys = new Set([...localKeys, ...liveFiltered.map(s => `${s.pickerName}|${s.dateStr}`)]);
+
+    // Our DB stats (3rd priority — historical uploads)
+    const apiRows = (apiStats ?? []).filter(s => !liveKeys.has(`${s.pickerName}|${s.dateStr}`));
     const apiMapped: DayStats[] = apiRows.map(s => ({
       pickerName: s.pickerName,
       dateStr: s.dateStr,
@@ -2841,7 +2919,7 @@ export default function App() {
       performanceRating: (s.performanceRating ?? undefined) as 'green' | 'yellow' | 'red' | undefined,
     }));
 
-    let statsArr = [...apiMapped, ...localStats];
+    let statsArr = [...apiMapped, ...liveFiltered, ...localStats];
 
     // Apply date filter
     if (dateFilter.from) statsArr = statsArr.filter(s => s.dateStr >= dateFilter.from);
@@ -2857,7 +2935,7 @@ export default function App() {
     const pickers = [...new Set(statsArr.map(s => s.pickerName))].sort();
     const gaps = statsArr.flatMap(s => s.gapFlags);
     return { allStats: statsArr, allDates: dates, pickerNames: pickers, allGapFlags: gaps };
-  }, [pickerData, apiStats, dateFilter]);
+  }, [pickerData, apiStats, liveStats, dateFilter]);
 
   const hasData = allStats.length > 0;
 
@@ -2892,7 +2970,7 @@ export default function App() {
         />
       )}
 
-      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} onClearDb={() => setClearDbOpen(true)} hasData={hasData} dateRange={dateRange} />
+      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} onClearDb={() => setClearDbOpen(true)} hasData={hasData} dateRange={dateRange} liveLastUpdated={liveLastUpdated} liveLoading={liveLoading} liveError={liveError} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
       {parseStatus && (
@@ -2902,16 +2980,16 @@ export default function App() {
         </div>
       )}
 
-      {apiLoading && !hasData ? (
+      {(apiLoading || liveLoading) && !hasData ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 60px)', flexDirection: 'column', gap: 16 }}>
           <div style={{ width: 36, height: 36, border: `3px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          <div style={{ color: DIM, fontSize: 13 }}>Loading team data…</div>
+          <div style={{ color: DIM, fontSize: 13 }}>Loading live data…</div>
         </div>
       ) : !hasData && !parseStatus ? (
         <>
-          {apiStats !== null && apiStats.length === 0 && (
+          {!liveLoading && liveStats.length === 0 && apiStats !== null && apiStats.length === 0 && (
             <div style={{ textAlign: 'center', padding: '24px 0 0', color: DIM, fontSize: 12 }}>
-              No data in database yet — upload your first file below.
+              No data available yet — upload your first file below.
             </div>
           )}
           <DropZone onFiles={handleFiles} isDragging={isDragging} setIsDragging={setIsDragging} />
