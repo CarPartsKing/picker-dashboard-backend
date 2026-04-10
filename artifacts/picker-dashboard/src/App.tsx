@@ -471,11 +471,12 @@ const DarkTip = ({ active, payload, label }: { active?: boolean; payload?: { col
 };
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dateRange, liveLastUpdated, liveLoading, liveError }: {
+function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dateRange, liveLastUpdated, liveLoading, liveError, onRefresh }: {
   lastUpdated: Date | null; onClear: () => void; onToggleHistory: () => void;
   onClearDb: () => void; hasData: boolean;
   dateRange: { first: string; last: string; days: number } | null;
   liveLastUpdated: string | null; liveLoading: boolean; liveError: string | null;
+  onRefresh: () => void;
 }) {
   const fmtLiveTs = (iso: string) => {
     const d = new Date(iso);
@@ -518,6 +519,7 @@ function Header({ lastUpdated, onClear, onToggleHistory, onClearDb, hasData, dat
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {lastUpdated && <span style={{ fontSize: 11, color: DIM, ...mono }}>{lastUpdated.toLocaleTimeString()}</span>}
+        {btn(liveLoading ? '↻ Refreshing…' : '↻ Refresh', onRefresh, { opacity: liveLoading ? 0.5 : 1 })}
         {hasData && btn('History', onToggleHistory)}
         {hasData && btn('Clear local', onClear)}
         {hasData && btn('Clear DB', onClearDb, { color: RED, borderColor: 'rgba(255,69,58,0.35)', background: 'rgba(255,69,58,0.08)' })}
@@ -2970,7 +2972,7 @@ export default function App() {
         />
       )}
 
-      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} onClearDb={() => setClearDbOpen(true)} hasData={hasData} dateRange={dateRange} liveLastUpdated={liveLastUpdated} liveLoading={liveLoading} liveError={liveError} />
+      <Header lastUpdated={lastUpdated} onClear={handleClear} onToggleHistory={() => setShowHistory(v => !v)} onClearDb={() => setClearDbOpen(true)} hasData={hasData} dateRange={dateRange} liveLastUpdated={liveLastUpdated} liveLoading={liveLoading} liveError={liveError} onRefresh={refreshLiveData} />
       {showHistory && hasData && <FileHistoryPanel history={fileHistory} />}
 
       {parseStatus && (
