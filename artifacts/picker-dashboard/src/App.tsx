@@ -728,6 +728,116 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
         </div>
       </div>
 
+      {/* ── Picker Trajectory Analysis ───────────────────────────────────────── */}
+      {(() => {
+        // Per-picker linear regression of L/Hr over time
+        const trajectories: Array<{
+          picker: string;
+          slope: number;       // L/Hr per day
+          currentLph: number;  // last trendline point
+          proj7: number;       // projected L/Hr in 7 days
+          r2: number;          // goodness of fit (0–1)
+          days: number;        // data points used
+          streak: number;      // consecutive days matching slope direction
+          streakDir: 'up' | 'down' | 'flat';
+        }> = [];
+
+        for (const picker of pickerNames) {
+          const lphDays = allStats
+            .filter(s => s.pickerName === picker && s.linesPerHour != null && s.linesPerHour > 0)
+            .sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+          if (lphDays.length < 3) continue;
+
+          const n = lphDays.length;
+          const ys = lphDays.map(d => d.linesPerHour!);
+          const meanX = (n - 1) / 2;
+          const meanY = ys.reduce((s, v) => s + v, 0) / n;
+          let ssXY = 0, ssXX = 0, ssYY = 0;
+          for (let i = 0; i < n; i++) {
+            ssXY += (i - meanX) * (ys[i] - meanY);
+            ssXX += (i - meanX) ** 2;
+            ssYY += (ys[i] - meanY) ** 2;
+          }
+          const slope = ssXX === 0 ? 0 : ssXY / ssXX;
+          const intercept = meanY - slope * meanX;
+          const r2 = ssYY === 0 ? 1 : Math.min(1, Math.max(0, (ssXY ** 2) / (ssXX * ssYY)));
+          const currentLph = intercept + slope * (n - 1);
+          const proj7 = Math.max(0, currentLph + slope * 7);
+
+          // Streak: consecutive tail days where actual vs trend matches slope direction
+          const dir = slope > 0.3 ? 'up' : slope < -0.3 ? 'down' : 'flat';
+          let streak = 0;
+          for (let i = n - 1; i >= 1; i--) {
+            const delta = ys[i] - ys[i - 1];
+            const matches = dir === 'up' ? delta > 0 : dir === 'down' ? delta < 0 : Math.abs(delta) < 1;
+            if (matches) streak++; else break;
+          }
+
+          trajectories.push({ picker, slope, currentLph, proj7, r2, days: n, streak, streakDir: dir });
+        }
+
+        if (trajectories.length === 0) return null;
+
+        // Sort: declining worst first, then by magnitude
+        trajectories.sort((a, b) => a.slope - b.slope);
+
+        return (
+          <div style={{ marginBottom: 32 }}>
+            <div style={secTitle}>Individual Trajectories</div>
+            <div style={{ fontSize: 12, color: DIM, marginBottom: 14 }}>
+              Personal trendline for each picker's L/Hr over time — who is improving, who is declining, and where they'll be in 7 days. Requires ≥3 days.
+            </div>
+            <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
+              <table style={tbl}>
+                <thead><tr>
+                  {['Picker', 'Trend', 'Rate', 'Current L/Hr', '7-Day Projection', 'Streak', 'Confidence', 'Days'].map(h => (
+                    <th key={h} style={th}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {trajectories.map((t, i) => {
+                    const dirColor = t.streakDir === 'up' ? GREEN : t.streakDir === 'down' ? RED : AMBER;
+                    const dirArrow = t.streakDir === 'up' ? '↑' : t.streakDir === 'down' ? '↓' : '→';
+                    const dirLabel = t.streakDir === 'up' ? 'Improving' : t.streakDir === 'down' ? 'Declining' : 'Stable';
+                    const projDelta = t.proj7 - t.currentLph;
+                    const confColor = t.r2 > 0.7 ? GREEN : t.r2 > 0.4 ? AMBER : RED;
+                    const confLabel = t.r2 > 0.7 ? 'High' : t.r2 > 0.4 ? 'Medium' : 'Low';
+                    return (
+                      <tr key={t.picker}
+                        style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)', cursor: 'pointer' }}
+                        onClick={() => setSel(t.picker)}>
+                        <td style={{ ...td, fontWeight: 600 }}>{t.picker}</td>
+                        <td style={{ ...td }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: dirColor, background: `${dirColor}18`, border: `1px solid ${dirColor}40`, borderRadius: 5, padding: '2px 8px', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+                            {dirArrow} {dirLabel}
+                          </span>
+                        </td>
+                        <td style={{ ...td, ...mono, fontWeight: 600, color: dirColor, whiteSpace: 'nowrap' }}>
+                          {t.slope >= 0 ? '+' : ''}{t.slope.toFixed(2)} L/Hr·day
+                        </td>
+                        <td style={{ ...td, ...mono }}>{t.currentLph.toFixed(1)}</td>
+                        <td style={{ ...td, ...mono, whiteSpace: 'nowrap' }}>
+                          <span style={{ color: t.proj7 >= t.currentLph ? GREEN : RED, fontWeight: 600 }}>{t.proj7.toFixed(1)}</span>
+                          <span style={{ color: DIM, fontSize: 10, marginLeft: 5 }}>({projDelta >= 0 ? '+' : ''}{projDelta.toFixed(1)})</span>
+                        </td>
+                        <td style={{ ...td, ...mono, color: t.streak >= 3 ? dirColor : DIM }}>
+                          {t.streak > 0 ? `${t.streak}d ${t.streakDir === 'up' ? '↑' : t.streakDir === 'down' ? '↓' : '→'}` : '—'}
+                        </td>
+                        <td style={{ ...td, color: confColor }}>{confLabel} <span style={{ color: DIM, fontSize: 10 }}>R²={t.r2.toFixed(2)}</span></td>
+                        <td style={{ ...td, ...mono, color: DIM }}>{t.days}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10, color: DIM, marginTop: 8 }}>
+              Click any row to view that picker's full score breakdown below. Confidence = how well their data fits the trend (R²). Streak = consecutive days matching the trend direction.
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Consistency Index ────────────────────────────────────────────────── */}
       {(() => {
         const byPicker = new Map<string, DayStats[]>();
