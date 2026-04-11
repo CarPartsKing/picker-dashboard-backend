@@ -8,6 +8,7 @@ export interface Order {
   orderNumber: string;
   linesPicked: number;
   timeMinutes: number | null;
+  isLookFor?: boolean;
 }
 
 export interface PickerDayRaw {
@@ -126,12 +127,13 @@ export function parseSheet(
         if (!t || SKIP_RE.test(t)) continue;
       }
       if (typeof orderCell === 'number' && orderCell <= 0) continue;
-      const timeMinutes = parseTime(timeCell);
+      const isLookFor = typeof timeCell === 'string' && /^\s*LF\s*$/i.test(timeCell);
+      const timeMinutes = isLookFor ? null : parseTime(timeCell);
       const lines = typeof linesCell === 'number'
         ? Math.round(linesCell)
         : parseInt(String(linesCell ?? '0'), 10) || 0;
       if (lines <= 0) continue;
-      orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes });
+      orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes, ...(isLookFor ? { isLookFor: true } : {}) });
     }
     if (orders.length > 0) {
       result[`${name}|${dateStr}`] = { pickerName: name, dateStr, dateISO, orders };

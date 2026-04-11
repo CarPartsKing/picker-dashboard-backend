@@ -131,15 +131,36 @@ function computeDayStats(data: PickerDayData): DayStats {
     firstTime = lastTime = times[0];
   }
   const avgLinesPerOrder = totalOrders > 0 ? totalLines / totalOrders : 0;
+  // Build LF-covered intervals by walking orders in original sheet order.
+  // An LF order between two timed orders means the picker was actively working
+  // during that window — suppress any gap that falls in an LF interval.
+  const lfIntervals: [number, number][] = [];
+  let lfTrackLast: number | null = null;
+  let inLfZone = false;
+  for (const order of orders) {
+    if (order.timeMinutes !== null) {
+      if (inLfZone && lfTrackLast !== null) {
+        lfIntervals.push([lfTrackLast, order.timeMinutes]);
+        inLfZone = false;
+      }
+      lfTrackLast = order.timeMinutes;
+    } else if (order.isLookFor) {
+      inLfZone = true;
+    }
+  }
+
   const gapFlags: GapFlag[] = [];
   for (let i = 1; i < times.length; i++) {
     const gap = times[i] - times[i - 1];
     if (gap >= 60) {
-      gapFlags.push({
-        pickerName, dateStr,
-        fromMinutes: times[i - 1], toMinutes: times[i], gapMinutes: gap,
-        severity: gap >= 120 ? 'High' : gap >= 90 ? 'Med' : 'Low',
-      });
+      const coveredByLF = lfIntervals.some(([from, to]) => from <= times[i - 1] && to >= times[i]);
+      if (!coveredByLF) {
+        gapFlags.push({
+          pickerName, dateStr,
+          fromMinutes: times[i - 1], toMinutes: times[i], gapMinutes: gap,
+          severity: gap >= 120 ? 'High' : gap >= 90 ? 'Med' : 'Low',
+        });
+      }
     }
   }
   return { pickerName, dateStr, date, totalOrders, totalLines, linesPerHour, ordersPerHour, avgLinesPerOrder, activeWindowMinutes, firstTime, lastTime, gapFlags };
@@ -440,8 +461,13 @@ function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
                       <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? '#7f4444' : isBoundary ? AMBER : order.timeMinutes !== null ? TEXT : DIM }}>
                         {order.timeMinutes !== null ? fmtMin(order.timeMinutes) : '—'}
                       </td>
-                      <td style={{ ...td, fontSize: 10, color: DIM, fontStyle: 'italic' }}>
-                        {isPhantom ? 'filtered — phantom timestamp' : isBoundary && order.timeMinutes === gapFrom ? 'gap starts here' : isBoundary && order.timeMinutes === gapTo ? 'gap ends here' : ''}
+                      <td style={{ ...td, fontSize: 10, fontStyle: 'italic' }}>
+                        {order.isLookFor
+                          ? <span style={{ color: AMBER, fontWeight: 600, fontStyle: 'normal' }}>Look For</span>
+                          : isPhantom ? <span style={{ color: DIM }}>filtered — phantom timestamp</span>
+                          : isBoundary && order.timeMinutes === gapFrom ? <span style={{ color: DIM }}>gap starts here</span>
+                          : isBoundary && order.timeMinutes === gapTo ? <span style={{ color: DIM }}>gap ends here</span>
+                          : ''}
                       </td>
                     </tr>
                   );
