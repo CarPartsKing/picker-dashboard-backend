@@ -127,7 +127,7 @@ export function parseSheet(
         if (!t || SKIP_RE.test(t)) continue;
       }
       if (typeof orderCell === 'number' && orderCell <= 0) continue;
-      const isLookFor = typeof timeCell === 'string' && /^\s*LF\s*$/i.test(timeCell);
+      const isLookFor = typeof timeCell === 'string' && /^\s*(L\.?F\.?|look\s+for)\s*$/i.test(timeCell);
       const timeMinutes = isLookFor ? null : parseTime(timeCell);
       const lines = typeof linesCell === 'number'
         ? Math.round(linesCell)
