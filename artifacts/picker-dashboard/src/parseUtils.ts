@@ -20,6 +20,20 @@ export interface PickerDayRaw {
 
 export const SKIP_RE = /^(pullers|team[\s_]?goals?|notes?|total|goals?|goal|#)/i;
 
+// Normalise a picker name so casing variants (ANTHONY / anthony / Anthony) all
+// resolve to the same canonical display form.
+// Rules:
+//   • Trim surrounding whitespace
+//   • Each word: first letter upper, rest lower
+//   • Exception: all-caps words of ≤ 3 alpha chars are kept as-is (e.g. MJ, AJ)
+export function normalizeName(raw: string): string {
+  return raw.trim().split(/\s+/).map(word => {
+    if (!word) return word;
+    if (word.length <= 3 && /^[A-Z]+$/.test(word)) return word;
+    return word[0].toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
+}
+
 export function parseTabDate(tabName: string): Date | null {
   const digits = tabName.replace(/\D/g, '');
   if (digits.length < 5) return null;
@@ -144,7 +158,8 @@ export function parseSheet(
       orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes, ...(isLookFor ? { isLookFor: true } : {}) });
     }
     if (orders.length > 0) {
-      result[`${name}|${dateStr}`] = { pickerName: name, dateStr, dateISO, orders };
+      const normalName = normalizeName(name);
+      result[`${normalName}|${dateStr}`] = { pickerName: normalName, dateStr, dateISO, orders };
     }
   }
   return result;

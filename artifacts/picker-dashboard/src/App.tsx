@@ -5,7 +5,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import type { Order, PickerDayRaw } from './parseUtils';
-import { toDateStr } from './parseUtils';
+import { toDateStr, normalizeName } from './parseUtils';
 import { fetchStats, uploadStats, clearAllStats, fetchLivePickerData, type ApiDayStat, type UploadPayload, type LivePickerRecord } from './apiClient';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -2769,10 +2769,11 @@ export default function App() {
 
   // ── Convert LivePickerRecord → DayStats ───────────────────────────────────────
   const liveRecordToDayStats = useCallback((r: LivePickerRecord): DayStats => {
+    const normalPicker = normalizeName(r.picker);
     const gapFlags: GapFlag[] = (r.gaps ?? [])
       .filter(g => g.gapMins >= 60)
       .map(g => ({
-        pickerName: r.picker,
+        pickerName: normalPicker,
         dateStr: r.date,
         fromMinutes: g.fromMins,
         toMinutes: g.toMins,
@@ -2780,7 +2781,7 @@ export default function App() {
         severity: g.gapMins >= 120 ? 'High' : g.gapMins >= 90 ? 'Med' : 'Low',
       }));
     return {
-      pickerName: r.picker,
+      pickerName: normalPicker,
       dateStr: r.date,
       date: new Date(r.date + 'T12:00:00'),
       totalOrders: r.orders,
@@ -3004,9 +3005,9 @@ export default function App() {
     const liveKeys = new Set([...localKeys, ...liveFiltered.map(s => `${s.pickerName}|${s.dateStr}`)]);
 
     // Our DB stats (3rd priority — historical uploads)
-    const apiRows = (apiStats ?? []).filter(s => !liveKeys.has(`${s.pickerName}|${s.dateStr}`));
+    const apiRows = (apiStats ?? []).filter(s => !liveKeys.has(`${normalizeName(s.pickerName)}|${s.dateStr}`));
     const apiMapped: DayStats[] = apiRows.map(s => ({
-      pickerName: s.pickerName,
+      pickerName: normalizeName(s.pickerName),
       dateStr: s.dateStr,
       date: new Date(s.dateStr + 'T12:00:00'),
       totalOrders: s.totalOrders,
