@@ -69,10 +69,18 @@ export function parseTime(val: unknown): number | null {
   }
   const str = String(val).trim();
   if (!str) return null;
+  const isPm = /pm/i.test(str);
+  const isAm = /am/i.test(str);
   const sep = str.includes(';') ? ';' : str.includes(':') ? ':' : null;
   if (sep) {
     const [hs, ms] = str.split(sep);
-    const h = parseInt(hs, 10), m = parseInt(ms, 10);
+    let h = parseInt(hs, 10);
+    const m = parseInt(ms, 10);
+    if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 12 && m >= 0 && m <= 59 && (isPm || isAm)) {
+      if (isPm && h < 12) h += 12;
+      if (isAm && h === 12) h = 0;
+      return h * 60 + m;
+    }
     if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) return h * 60 + m;
   }
   const n = parseInt(str, 10);
