@@ -1176,7 +1176,8 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
     const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
     const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
     const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
-    return { name, avgLph, totalLines, totalOrders, daysWorked: days.length, color: PICKER_COLORS[i % PICKER_COLORS.length] };
+    const isLFSpecialist = days.some(d => (d.lfOrders ?? 0) > 0);
+    return { name, avgLph, totalLines, totalOrders, daysWorked: days.length, color: PICKER_COLORS[i % PICKER_COLORS.length], isLFSpecialist };
   }).sort((a, b) => b.avgLph - a.avgLph), [allStats, pickerNames]);
 
   const teamBenchmark = useMemo(() => {
@@ -1236,6 +1237,13 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
                   )}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{p.name}</div>
+                {p.isLFSpecialist && (
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: AMBER, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', borderRadius: 20, padding: '2px 8px' }}>
+                      Look For Specialist
+                    </span>
+                  </div>
+                )}
                 <div style={{ fontSize: 22, fontWeight: 700, color: AMBER, ...mono }}>{p.avgLph > 0 ? p.avgLph.toFixed(1) : '—'}</div>
                 {teamBenchmark > 0 && p.avgLph > 0 && (
                   <div style={{ fontSize: 10, color: benchmarkColor, marginTop: 3 }}>
