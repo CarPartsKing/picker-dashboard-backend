@@ -52,6 +52,8 @@ interface DayStats {
   lastTime: number | null;
   gapFlags: GapFlag[];
   performanceRating?: 'green' | 'yellow' | 'red';
+  lfOrders?: number;
+  lfLines?: number;
 }
 interface GapFlag {
   pickerName: string;
@@ -131,6 +133,8 @@ function computeDayStats(data: PickerDayData): DayStats {
     firstTime = lastTime = times[0];
   }
   const avgLinesPerOrder = totalOrders > 0 ? totalLines / totalOrders : 0;
+  const lfOrders = orders.filter(o => o.isLookFor).length;
+  const lfLines  = orders.filter(o => o.isLookFor).reduce((s, o) => s + o.linesPicked, 0);
   // Build LF-covered intervals by walking orders in original sheet order.
   // An LF order between two timed orders means the picker was actively working
   // during that window — suppress any gap that falls in an LF interval.
@@ -163,7 +167,7 @@ function computeDayStats(data: PickerDayData): DayStats {
       }
     }
   }
-  return { pickerName, dateStr, date, totalOrders, totalLines, linesPerHour, ordersPerHour, avgLinesPerOrder, activeWindowMinutes, firstTime, lastTime, gapFlags };
+  return { pickerName, dateStr, date, totalOrders, totalLines, linesPerHour, ordersPerHour, avgLinesPerOrder, activeWindowMinutes, firstTime, lastTime, gapFlags, lfOrders, lfLines };
 }
 
 function assignRatings(statsByDate: Map<string, DayStats[]>) {
@@ -1813,8 +1817,10 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   }, [allStats]);
 
   const days = useMemo(() => allStats.filter(s => s.pickerName === sel), [allStats, sel]);
-  const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
+  const totalLines  = days.reduce((s, d) => s + d.totalLines, 0);
   const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
+  const totalLfOrders = days.reduce((s, d) => s + (d.lfOrders ?? 0), 0);
+  const totalLfLines  = days.reduce((s, d) => s + (d.lfLines  ?? 0), 0);
   const lphDays = days.filter(s => s.linesPerHour != null);
   const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
   const avgLpo = totalOrders > 0 ? totalLines / totalOrders : 0;
@@ -1889,6 +1895,8 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           <StatCard label="Avg Lines/Hr" value={avgLph > 0 ? avgLph.toFixed(1) : '—'} />
           <StatCard label="Lines/Order" value={avgLpo > 0 ? avgLpo.toFixed(1) : '—'} color={TEXT} />
           <StatCard label="Days Worked" value={days.length} color={TEXT} />
+          <StatCard label="Look For Orders" value={totalLfOrders > 0 ? totalLfOrders.toLocaleString() : '—'} color={totalLfOrders > 0 ? AMBER : DIM} />
+          <StatCard label="Look For Lines" value={totalLfLines > 0 ? totalLfLines.toLocaleString() : '—'} color={totalLfLines > 0 ? AMBER : DIM} />
           <StatCard label="vs Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
           <StatCard label="Trend" value={trendValue} sub={trendSub || undefined} color={trendColor} />
           <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor}
@@ -2721,6 +2729,8 @@ export default function App() {
       firstTime: r.first_time_mins,
       lastTime: r.last_time_mins,
       gapFlags,
+      lfOrders: r.lf_orders ?? 0,
+      lfLines:  r.lf_lines  ?? 0,
     };
   }, []);
 

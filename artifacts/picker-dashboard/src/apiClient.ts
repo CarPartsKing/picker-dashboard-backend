@@ -110,6 +110,8 @@ export interface LivePickerRecord {
   gaps: Array<{ fromMins: number; toMins: number; gapMins: number }>;
   order_detail: unknown[];
   exported_at: string;
+  lf_orders: number | null;
+  lf_lines: number | null;
 }
 
 export interface LivePickerResponse {
