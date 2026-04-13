@@ -982,7 +982,14 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
               );
             })()}
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: TEXT, marginBottom: 8 }}>{sel}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: TEXT }}>{sel}</div>
+                {allStats.filter(s => s.pickerName === sel).some(s => (s.lfOrders ?? 0) > 0) && (
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: AMBER, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', borderRadius: 20, padding: '3px 10px' }}>
+                    Look For Specialist
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'inline-block', padding: '4px 14px', borderRadius: 20, background: `${selScore.bandColor}22`, border: `1px solid ${selScore.bandColor}55`, fontSize: 12, fontWeight: 700, color: selScore.bandColor, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 {selScore.band}
               </div>
@@ -1893,7 +1900,14 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Select Picker</div>
-        <Dropdown value={sel} onChange={setSel} options={pickerNames} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <Dropdown value={sel} onChange={setSel} options={pickerNames} />
+          {totalLfOrders > 0 && (
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: AMBER, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', borderRadius: 20, padding: '3px 10px' }}>
+              Look For Specialist
+            </span>
+          )}
+        </div>
       </div>
 
       <div style={{ ...section }}>
