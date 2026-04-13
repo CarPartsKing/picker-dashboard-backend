@@ -235,7 +235,7 @@ interface KpiResult { pts: number; max: number; rawValue: string; label: string;
 interface PickerScore {
   total: number; band: string; bandColor: string;
   pickRate: KpiResult; consistency: KpiResult; uptime: KpiResult;
-  batchEff: KpiResult; trend: KpiResult;
+  batchEff: KpiResult; trend: KpiResult; lfContrib: KpiResult;
 }
 function computePickerScore(
   picker: string,
@@ -253,8 +253,8 @@ function computePickerScore(
   const teamAvgLph   = teamLphs.length
     ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
   const ratio        = teamAvgLph > 0 ? pickerAvgLph / teamAvgLph : 0;
-  // 100 % of team ≈ 25 pts; 120 %+ → 35 pts; scales linearly; floor 5
-  const pickRatePts  = Math.round(Math.max(5, Math.min(35, ratio * 29.2)));
+  // 100 % of team ≈ 21 pts; 120 %+ → 30 pts; scales linearly; floor 4
+  const pickRatePts  = Math.round(Math.max(4, Math.min(30, ratio * 25)));
 
   // 2. Consistency (max 25 pts) ───────────────────────────────────────────────
   let consistencyPts = 12;
@@ -325,7 +325,20 @@ function computePickerScore(
     if (pct !== null) applyPct(pct);
   }
 
-  const total = pickRatePts + consistencyPts + uptimePts + batchPts + trendPts;
+  // 6. Look For Contribution (max 10 pts) ────────────────────────────────────
+  const pickerLfTotal  = days.reduce((s, d) => s + (d.lfOrders ?? 0), 0);
+  const allPickerNames = [...new Set(allStats.map(s => s.pickerName))];
+  const teamLfMax      = Math.max(1, ...allPickerNames.map(p =>
+    allStats.filter(s => s.pickerName === p).reduce((s, d) => s + (d.lfOrders ?? 0), 0)
+  ));
+  let lfPts   = 0;
+  let lfLabel = 'No look-for activity recorded';
+  if (pickerLfTotal > 0) {
+    lfPts   = Math.min(10, Math.max(3, Math.round((pickerLfTotal / teamLfMax) * 10)));
+    lfLabel = `${pickerLfTotal} LF order${pickerLfTotal > 1 ? 's' : ''} across ${days.filter(d => (d.lfOrders ?? 0) > 0).length} day(s)`;
+  }
+
+  const total = pickRatePts + consistencyPts + uptimePts + batchPts + trendPts + lfPts;
   let band = 'Needs Focus', bandColor = RED;
   if      (total >= 85) { band = 'Elite';      bandColor = '#00E5FF'; }
   else if (total >= 70) { band = 'Strong';     bandColor = GREEN; }
@@ -334,11 +347,12 @@ function computePickerScore(
 
   return {
     total, band, bandColor,
-    pickRate:    { pts: pickRatePts,    max: 35, rawValue: pickerAvgLph > 0 ? `${pickerAvgLph.toFixed(1)} L/Hr` : 'No timing data', label: 'Pick Rate' },
+    pickRate:    { pts: pickRatePts,    max: 30, rawValue: pickerAvgLph > 0 ? `${pickerAvgLph.toFixed(1)} L/Hr` : 'No timing data', label: 'Pick Rate' },
     consistency: { pts: consistencyPts, max: 25, rawValue: cvLabel,      label: 'Consistency' },
     uptime:      { pts: uptimePts,      max: 20, rawValue: flagLabel,     label: 'Uptime' },
     batchEff:    { pts: batchPts,       max: 10, rawValue: batchLabel,    label: 'Batch Efficiency' },
     trend:       { pts: trendPts,       max: 10, rawValue: trendLabel,    label: 'Trend (recent vs prior)' },
+    lfContrib:   { pts: lfPts,          max: 10, rawValue: lfLabel,       label: 'Look For Contribution' },
   };
 }
 
@@ -637,15 +651,15 @@ function DropZone({ onFiles, isDragging, setIsDragging, compact }: {
 // ─── SCORE TAB ────────────────────────────────────────────────────────────────
 const KPI_META = [
   {
-    key: 'pickRate' as const, color: AMBER, max: 35,
+    key: 'pickRate' as const, color: AMBER, max: 30,
     what: 'Your rolling average Lines per Hour (L/Hr) compared to the team average. This is the core measure of raw productivity.',
     rows: [
-      ['≥ 120% of team avg', '35 pts'],
-      ['100% of team avg',   '~25 pts'],
-      ['80% of team avg',    '~15 pts'],
-      ['< 60% of team avg',  '5 pts (floor)'],
+      ['≥ 120% of team avg', '30 pts'],
+      ['100% of team avg',   '~21 pts'],
+      ['80% of team avg',    '~13 pts'],
+      ['< 60% of team avg',  '4 pts (floor)'],
     ],
-    note: 'Score scales smoothly between thresholds — never falls below 5 pts so everyone gets credit for working.',
+    note: 'Score scales smoothly between thresholds — never falls below 4 pts so everyone gets credit for working.',
   },
   {
     key: 'consistency' as const, color: GREEN, max: 25,
@@ -691,6 +705,17 @@ const KPI_META = [
       ['Declining > 15%',   '0 pts'],
     ],
     note: 'Requires ≥3 days of timing data. Defaults to 6 pts (flat) when not enough data is available.',
+  },
+  {
+    key: 'lfContrib' as const, color: AMBER, max: 10,
+    what: 'Recognises pickers who support the team by performing look-fors — finding parts that other pickers could not locate. Duration is measured from the last order before the LF entry to the next order timestamp after it.',
+    rows: [
+      ['No LF activity',             '0 pts'],
+      ['Any LF activity',            '3 pts (min)'],
+      ['Proportional to team volume', 'up to 10 pts'],
+      ['Top LF contributor',         '10 pts'],
+    ],
+    note: 'Scales relative to the highest LF contributor on the team — rewarding consistent effort without penalising pickers who do not do look-fors.',
   },
 ] as const;
 
@@ -742,7 +767,7 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
   }
 
   const kpiOrder: (keyof Omit<PickerScore, 'total' | 'band' | 'bandColor'>)[] =
-    ['pickRate', 'consistency', 'uptime', 'batchEff', 'trend'];
+    ['pickRate', 'consistency', 'uptime', 'batchEff', 'trend', 'lfContrib'];
 
   return (
     <div style={{ padding: '28px 28px', maxWidth: 920, margin: '0 auto' }}>
