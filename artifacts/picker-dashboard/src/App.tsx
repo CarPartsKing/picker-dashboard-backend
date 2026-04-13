@@ -117,27 +117,15 @@ function computeDayStats(data: PickerDayData): DayStats {
   const totalLines  = orders.reduce((s, o) => s + o.linesPicked, 0);
   const rawTimes = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
   const times = removePhantomTimes(rawTimes).sort((a, b) => a - b);
-  let linesPerHour: number | null = null;
-  let ordersPerHour: number | null = null;
-  let activeWindowMinutes: number | null = null;
-  let firstTime: number | null = null;
-  let lastTime: number | null = null;
-  if (times.length >= 2) {
-    firstTime = times[0]; lastTime = times[times.length - 1];
-    activeWindowMinutes = lastTime - firstTime;
-    if (activeWindowMinutes > 0) {
-      linesPerHour  = (totalLines  / activeWindowMinutes) * 60;
-      ordersPerHour = (totalOrders / activeWindowMinutes) * 60;
-    }
-  } else if (times.length === 1) {
-    firstTime = lastTime = times[0];
-  }
-  const avgLinesPerOrder = totalOrders > 0 ? totalLines / totalOrders : 0;
+
   const lfOrders = orders.filter(o => o.isLookFor).length;
   const lfLines  = orders.filter(o => o.isLookFor).reduce((s, o) => s + o.linesPicked, 0);
+
   // Build LF-covered intervals by walking orders in original sheet order.
   // An LF order between two timed orders means the picker was actively working
-  // during that window — suppress any gap that falls in an LF interval.
+  // during that window — suppress any gap that falls in an LF interval,
+  // and exclude LF time from the efficiency denominator so it doesn't
+  // penalise the picker's L/Hr.
   const lfIntervals: [number, number][] = [];
   let lfTrackLast: number | null = null;
   let inLfZone = false;
@@ -152,6 +140,26 @@ function computeDayStats(data: PickerDayData): DayStats {
       inLfZone = true;
     }
   }
+  const lfWindowMinutes = lfIntervals.reduce((s, [from, to]) => s + (to - from), 0);
+
+  let linesPerHour: number | null = null;
+  let ordersPerHour: number | null = null;
+  let activeWindowMinutes: number | null = null;
+  let firstTime: number | null = null;
+  let lastTime: number | null = null;
+  if (times.length >= 2) {
+    firstTime = times[0]; lastTime = times[times.length - 1];
+    activeWindowMinutes = lastTime - firstTime;
+    // Subtract LF time so a picker isn't penalised for time spent on look-fors.
+    const effectiveWindow = Math.max(activeWindowMinutes - lfWindowMinutes, 1);
+    if (effectiveWindow > 0) {
+      linesPerHour  = (totalLines  / effectiveWindow) * 60;
+      ordersPerHour = (totalOrders / effectiveWindow) * 60;
+    }
+  } else if (times.length === 1) {
+    firstTime = lastTime = times[0];
+  }
+  const avgLinesPerOrder = totalOrders > 0 ? totalLines / totalOrders : 0;
 
   const gapFlags: GapFlag[] = [];
   for (let i = 1; i < times.length; i++) {
