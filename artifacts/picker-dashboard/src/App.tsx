@@ -1981,7 +1981,6 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
             <StatCard label="Look For Orders" value={totalLfOrders.toLocaleString()} color={AMBER} />
             <StatCard label="Look For Lines"  value={totalLfLines.toLocaleString()}  color={AMBER} />
             <StatCard label="LF Minutes"      value={lfTimeLabel ?? '—'}             color={lfTimeLabel ? AMBER : DIM} />
-            <StatCard label="Avg Mins / LF Order" value={lfAvgMinsPerOrderVal ? `${lfAvgMinsPerOrderVal}m` : '—'} color={lfAvgMinsPerOrderVal ? AMBER : DIM} />
             <StatCard label="LF % of Shift"   value={lfPctOfShiftVal ? `${lfPctOfShiftVal}%` : '—'} color={lfPctOfShiftVal ? AMBER : DIM} />
           </div>
         </div>
