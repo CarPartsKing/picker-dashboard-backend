@@ -1358,6 +1358,42 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
         </div>
       )}
 
+      {/* ── Look For Activity (team bar chart) ──────────────────────────────── */}
+      {(() => {
+        const lfByDay = allDates.map(ds => {
+          const total = allStats
+            .filter(s => s.dateStr === ds)
+            .reduce((s, d) => s + (d.lfOrders ?? 0), 0);
+          return { date: fmtDate(ds), lf: total };
+        });
+        if (!lfByDay.some(d => d.lf > 0)) return null;
+        const activeDays = lfByDay.filter(d => d.lf > 0);
+        const lfAvg = activeDays.reduce((s, d) => s + d.lf, 0) / activeDays.length;
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Look For Activity <span style={{ fontSize: 11, color: DIM, fontWeight: 400 }}>— team LF orders per day</span></div>
+            <div style={{ ...card, padding: '16px 0 0 0' }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={lfByDay} margin={{ left: 10, right: 40, top: 24, bottom: 46 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: DIM, fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<DarkTip />} />
+                  <ReferenceLine y={lfAvg} stroke={DIM} strokeDasharray="4 4"
+                    label={{ value: `avg ${lfAvg.toFixed(1)}`, position: 'right', fill: DIM, fontSize: 10 }} />
+                  <Bar dataKey="lf" name="LF Orders" radius={[3, 3, 0, 0]}
+                    label={{ position: 'top', fill: AMBER, fontSize: 10, fontWeight: 700, formatter: (v: number) => v > 0 ? String(v) : '' }}>
+                    {lfByDay.map((entry, i) => (
+                      <Cell key={i} fill={entry.lf > lfAvg * 1.5 ? RED : AMBER} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Performance Anomalies ────────────────────────────────────────────── */}
       {(() => {
         const byPicker = new Map<string, DayStats[]>();
@@ -1985,6 +2021,52 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           </div>
         </div>
       )}
+
+      {/* ── Look For Trend (picker line chart) ──────────────────────────────── */}
+      {totalLfOrders > 0 && (() => {
+        const lfTrendData = allDates.map(ds => {
+          const day = days.find(s => s.dateStr === ds);
+          const lf = day ? (day.lfOrders ?? 0) : null;
+          return { date: fmtDate(ds), lf: lf && lf > 0 ? lf : null };
+        });
+        const lfActiveDays = days.filter(d => (d.lfOrders ?? 0) > 0).length;
+        const lfDailyAvg = lfActiveDays > 0 ? totalLfOrders / lfActiveDays : 0;
+        const renderDot = (props: Record<string, unknown>) => {
+          const cx = props.cx as number;
+          const cy = props.cy as number;
+          const payload = props.payload as { lf: number | null };
+          if (!payload.lf) return <g key={`dot-empty-${cx}`} />;
+          const isSpike = lfDailyAvg > 0 && payload.lf > lfDailyAvg * 2;
+          return <circle key={`dot-${cx}`} cx={cx} cy={cy} r={isSpike ? 6 : 3} fill={isSpike ? RED : AMBER} stroke={isSpike ? 'rgba(255,69,58,0.4)' : AMBER} strokeWidth={isSpike ? 2 : 1} />;
+        };
+        return (
+          <div style={{ ...section, borderColor: 'rgba(56,189,248,0.3)', marginBottom: 24 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: AMBER, marginBottom: 12 }}>
+              Look For Trend
+              {lfDailyAvg > 0 && <span style={{ fontWeight: 400, marginLeft: 8, color: DIM, textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>personal avg {lfDailyAvg.toFixed(1)} LF orders on active days</span>}
+            </div>
+            <div style={{ ...card, padding: '16px 0 0 0' }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={lfTrendData} margin={{ left: 10, right: 40, top: 10, bottom: 46 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={BORDER} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: DIM, fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<DarkTip />} />
+                  {lfDailyAvg > 0 && (
+                    <ReferenceLine y={lfDailyAvg} stroke={AMBER} strokeDasharray="4 4" strokeOpacity={0.4}
+                      label={{ value: `avg ${lfDailyAvg.toFixed(1)}`, position: 'right', fill: AMBER, fontSize: 10 }} />
+                  )}
+                  <Line type="monotone" dataKey="lf" name="LF Orders"
+                    stroke={AMBER} strokeWidth={2}
+                    dot={renderDot as unknown as boolean}
+                    activeDot={{ r: 5, fill: AMBER }}
+                    connectNulls={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Benchmark Banner ─────────────────────────────────────────────────── */}
       {teamAvgLph > 0 && avgLph > 0 && (() => {
