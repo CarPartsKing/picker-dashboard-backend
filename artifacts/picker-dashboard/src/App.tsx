@@ -2000,10 +2000,52 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           <StatCard label="Avg Lines/Hr" value={avgLph > 0 ? avgLph.toFixed(1) : '—'} />
           <StatCard label="Lines/Order" value={avgLpo > 0 ? avgLpo.toFixed(1) : '—'} color={TEXT} />
           <StatCard label="Days Worked" value={days.length} color={TEXT} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0 10px' }}>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+          <span style={{ fontSize: 9, color: DIM, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>Assessment</span>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+        </div>
+        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
           <StatCard label="vs Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
           <StatCard label="Trend" value={trendValue} sub={trendSub || undefined} color={trendColor} />
           <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor}
             onInfo={() => setShowConsistencyInfo(s => !s)} />
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+        <div style={{ ...card, padding: '14px 0 8px 0' }}>
+          <div style={{ padding: '0 16px 6px', fontSize: 11, fontWeight: 700, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Daily Lines</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={trendData} margin={{ left: 10, right: 12, top: 4, bottom: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+              <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
+              <YAxis tick={{ fill: DIM, fontSize: 9 }} />
+              <Tooltip content={<DarkTip />} />
+              <Bar dataKey="lines" fill={AMBER} name="Lines" radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ ...card, padding: '14px 0 8px 0' }}>
+          <div style={{ padding: '0 16px 6px', display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Lines / Hr</span>
+            <span style={{ fontSize: 9, color: DIM }}>
+              <span style={{ display: 'inline-block', width: 18, height: 2, background: GREEN, verticalAlign: 'middle', marginRight: 4 }} />L/Hr
+              <span style={{ display: 'inline-block', width: 18, height: 2, background: AMBER, verticalAlign: 'middle', marginLeft: 10, marginRight: 4, borderTop: '2px dashed ' + AMBER }} />L/Order
+            </span>
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={trendData.filter(d => d.lph != null || d.lpo != null)} margin={{ left: 10, right: 28, top: 4, bottom: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+              <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
+              <YAxis yAxisId="left"  tick={{ fill: DIM, fontSize: 9 }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fill: AMBER, fontSize: 9 }} />
+              <Tooltip content={<DarkTip />} />
+              <Line yAxisId="left"  type="monotone" dataKey="lph" stroke={GREEN} strokeWidth={2} dot={{ fill: GREEN, r: 3 }} name="L/Hr" connectNulls />
+              <Line yAxisId="right" type="monotone" dataKey="lpo" stroke={AMBER} strokeWidth={1.5} strokeDasharray="5 3" dot={{ fill: AMBER, r: 2 }} name="L/Order" connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -2312,49 +2354,6 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         );
       })()}
 
-      {(() => {
-        const strengths: string[] = [];
-        const focus: string[] = [];
-        if (avgLph > 0 && teamAvgLph > 0) {
-          if (avgLph >= teamAvgLph * 1.05) strengths.push(`Above-average pick rate — ${avgLph.toFixed(1)} L/Hr vs team ${teamAvgLph.toFixed(1)}`);
-          else if (avgLph < teamAvgLph * 0.95) focus.push(`Pick rate below team average — ${avgLph.toFixed(1)} L/Hr vs team ${teamAvgLph.toFixed(1)}`);
-        }
-        if (consistencyValue === 'High') strengths.push(`Steady day-to-day output (${consistencySub})`);
-        else if (consistencyValue === 'Low') focus.push(`Variable output day to day (${consistencySub})`);
-        if (trendValue.startsWith('↑')) strengths.push(`Improving trend — ${trendValue.replace('↑ ', '')} ${trendSub}`);
-        else if (trendValue.startsWith('↓')) focus.push(`Declining trend — ${trendValue.replace('↓ ', '')} ${trendSub}`);
-        if (pickerGaps.length === 0 && days.length >= 3) strengths.push(`No gap flags across ${days.length} days`);
-        else if (pickerGaps.length > 0) focus.push(`${pickerGaps.length} gap flag${pickerGaps.length > 1 ? 's' : ''} recorded — check raw orders`);
-        if (avgLpo > 0 && teamAvgLpo > 0) {
-          if (vsTeamLpo >= 20) strengths.push(`Handles orders ${vsTeamLpo.toFixed(0)}% more complex than the team average (${avgLpo.toFixed(1)} vs ${teamAvgLpo.toFixed(1)} lines/order) — their L/Hr should be read in that context`);
-          else if (vsTeamLpo <= -20) focus.push(`Order complexity is ${Math.abs(vsTeamLpo).toFixed(0)}% below the team average (${avgLpo.toFixed(1)} vs ${teamAvgLpo.toFixed(1)} lines/order) — rate comparisons are more direct`);
-        }
-        if (strengths.length === 0 && focus.length === 0) return null;
-        const col = (items: string[], color: string, label: string) => (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
-            {items.length === 0
-              ? <div style={{ fontSize: 12, color: DIM }}>Nothing notable</div>
-              : items.map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-                  <span style={{ color, fontSize: 13, lineHeight: 1, marginTop: 1 }}>{label === 'Strengths' ? '✓' : '·'}</span>
-                  <span style={{ fontSize: 12, color: TEXT, lineHeight: 1.5 }}>{s}</span>
-                </div>
-              ))
-            }
-          </div>
-        );
-        return (
-          <div style={{ ...section }}>
-            <div style={secTitle}>Strengths &amp; Focus Areas</div>
-            <div style={{ ...card, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-              {col(strengths, GREEN, 'Strengths')}
-              {col(focus, YELLOW, 'Focus Areas')}
-            </div>
-          </div>
-        );
-      })()}
-
       {batchStats && (() => {
         const sizeBuckets = [
           { label: '1', count: batchStats.batches.filter(b => b.orderCount === 1).length },
@@ -2407,40 +2406,48 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         );
       })()}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-        <div style={{ ...card, padding: '14px 0 8px 0' }}>
-          <div style={{ padding: '0 16px 6px', fontSize: 11, fontWeight: 700, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Daily Lines</div>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={trendData} margin={{ left: 10, right: 12, top: 4, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
-              <YAxis tick={{ fill: DIM, fontSize: 9 }} />
-              <Tooltip content={<DarkTip />} />
-              <Bar dataKey="lines" fill={AMBER} name="Lines" radius={[2, 2, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div style={{ ...card, padding: '14px 0 8px 0' }}>
-          <div style={{ padding: '0 16px 6px', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: DIM, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Lines / Hr</span>
-            <span style={{ fontSize: 9, color: DIM }}>
-              <span style={{ display: 'inline-block', width: 18, height: 2, background: GREEN, verticalAlign: 'middle', marginRight: 4 }} />L/Hr
-              <span style={{ display: 'inline-block', width: 18, height: 2, background: AMBER, verticalAlign: 'middle', marginLeft: 10, marginRight: 4, borderTop: '2px dashed ' + AMBER }} />L/Order
-            </span>
+      {(() => {
+        const strengths: string[] = [];
+        const focus: string[] = [];
+        if (avgLph > 0 && teamAvgLph > 0) {
+          if (avgLph >= teamAvgLph * 1.05) strengths.push(`Above-average pick rate — ${avgLph.toFixed(1)} L/Hr vs team ${teamAvgLph.toFixed(1)}`);
+          else if (avgLph < teamAvgLph * 0.95) focus.push(`Pick rate below team average — ${avgLph.toFixed(1)} L/Hr vs team ${teamAvgLph.toFixed(1)}`);
+        }
+        if (consistencyValue === 'High') strengths.push(`Steady day-to-day output (${consistencySub})`);
+        else if (consistencyValue === 'Low') focus.push(`Variable output day to day (${consistencySub})`);
+        if (trendValue.startsWith('↑')) strengths.push(`Improving trend — ${trendValue.replace('↑ ', '')} ${trendSub}`);
+        else if (trendValue.startsWith('↓')) focus.push(`Declining trend — ${trendValue.replace('↓ ', '')} ${trendSub}`);
+        if (pickerGaps.length === 0 && days.length >= 3) strengths.push(`No gap flags across ${days.length} days`);
+        else if (pickerGaps.length > 0) focus.push(`${pickerGaps.length} gap flag${pickerGaps.length > 1 ? 's' : ''} recorded — check raw orders`);
+        if (avgLpo > 0 && teamAvgLpo > 0) {
+          if (vsTeamLpo >= 20) strengths.push(`Handles orders ${vsTeamLpo.toFixed(0)}% more complex than the team average (${avgLpo.toFixed(1)} vs ${teamAvgLpo.toFixed(1)} lines/order) — their L/Hr should be read in that context`);
+          else if (vsTeamLpo <= -20) focus.push(`Order complexity is ${Math.abs(vsTeamLpo).toFixed(0)}% below the team average (${avgLpo.toFixed(1)} vs ${teamAvgLpo.toFixed(1)} lines/order) — rate comparisons are more direct`);
+        }
+        if (strengths.length === 0 && focus.length === 0) return null;
+        const col = (items: string[], color: string, label: string) => (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+            {items.length === 0
+              ? <div style={{ fontSize: 12, color: DIM }}>Nothing notable</div>
+              : items.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                  <span style={{ color, fontSize: 13, lineHeight: 1, marginTop: 1 }}>{label === 'Strengths' ? '✓' : '·'}</span>
+                  <span style={{ fontSize: 12, color: TEXT, lineHeight: 1.5 }}>{s}</span>
+                </div>
+              ))
+            }
           </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={trendData.filter(d => d.lph != null || d.lpo != null)} margin={{ left: 10, right: 28, top: 4, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-              <XAxis dataKey="date" tick={{ fill: DIM, fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
-              <YAxis yAxisId="left"  tick={{ fill: DIM, fontSize: 9 }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: AMBER, fontSize: 9 }} />
-              <Tooltip content={<DarkTip />} />
-              <Line yAxisId="left"  type="monotone" dataKey="lph" stroke={GREEN} strokeWidth={2} dot={{ fill: GREEN, r: 3 }} name="L/Hr" connectNulls />
-              <Line yAxisId="right" type="monotone" dataKey="lpo" stroke={AMBER} strokeWidth={1.5} strokeDasharray="5 3" dot={{ fill: AMBER, r: 2 }} name="L/Order" connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        );
+        return (
+          <div style={{ ...section }}>
+            <div style={secTitle}>Strengths &amp; Focus Areas</div>
+            <div style={{ ...card, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+              {col(strengths, GREEN, 'Strengths')}
+              {col(focus, YELLOW, 'Focus Areas')}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ ...section }}>
         <div style={secTitle}>Day-by-Day Breakdown</div>
