@@ -1,0 +1,21 @@
+"Add a Daily Digest view as the default landing page of the dashboard. This should be the first thing anyone sees when they open the app. Here is exactly what it should show:
+HEADER SECTION:
+Show the date of the most recent data available in large text. Show a single headline stat: total lines picked by the whole team that day in very large bold text. Below it show total orders and total active pickers as smaller supporting stats. Show time of last data refresh in small text top right.
+GOAL ATTAINMENT CARD — most prominent element on the page:
+Show how many pickers hit 6 orders per hour today out of total pickers working. Display as X out of Y format like 8 out of 11. Large number, takes up significant space. Green background if 70% or more hit the goal, amber if 50 to 70%, red if below 50%. Below the fraction show the percentage. This is the first thing eyes should go to.
+TEAM PERFORMANCE ROW:
+Three stat cards side by side: Team avg Lines per Hour with trend arrow vs prior day, Team avg Orders per Hour with trend arrow vs prior day, Total LF Orders for the day with trend arrow vs 7 day average. Each card shows a small 7 day sparkline below the number.
+TOP PERFORMER CARD:
+Highlight the single highest lines per hour picker of the day. Show their name prominently, their lines per hour, total lines picked, and how far above team average they are as a percentage. Green styling with subtle highlight.
+NEEDS ATTENTION SECTION:
+Show any picker who is more than 25% below their 7 day personal average lines per hour. Show their name, today lines per hour, their 7 day average, and the percentage gap. Amber styling. If nobody qualifies show a small green checkmark with text saying all pickers within normal range. Clicking a picker name goes to their detail view.
+LF SPIKE ALERT:
+Only show this card if total LF orders for the day are more than 50% above the 7 day daily LF average. Show the LF count, the average, and how much above average in percentage. Amber border, amber text. If LF is normal this entire card is hidden — do not show a green version, just hide it completely.
+HIGH SEVERITY GAP FLAGS:
+Only show this card if there are gaps of 120 minutes or more from the most recent day. Show each flagged picker by name, the gap time window, and the duration in minutes. Red styling. Clicking goes to their detail view. If no high severity gaps this card is completely hidden.
+QUICK NAVIGATION:
+At the bottom show four pill buttons: Full Overview, Weekly, Compare, Picker Detail. Minimal styling, just enough to be obvious.
+DESIGN REQUIREMENTS:
+Maximum 2 seconds to understand the page. No charts on this view except the small sparklines. Works perfectly on mobile — cards stack vertically. Dark theme consistent with rest of app. Most critical information at top, least critical at bottom. Auto refreshes every 30 minutes. If the LF alert and gap flags cards are both hidden the needs attention section moves up to fill the space cleanly.
+CALCULATION RULES:
+Most recent day = highest date in the loaded data. 7 day average = average of last 7 dates available. Personal average = each picker's average lines per hour across all dates available for them. Goal attainment = count of pickers where orders per hour is 6 or above divided by total pickers with data for that day. All calculations done client side from existing API data. No new backend calls needed."
