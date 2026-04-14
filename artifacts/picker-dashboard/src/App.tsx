@@ -55,6 +55,8 @@ interface DayStats {
   lfOrders?: number;
   lfLines?: number;
   lfMinutes?: number;
+  lfAvgMinsPerOrder?: number;
+  lfPctOfShift?: number;
 }
 interface GapFlag {
   pickerName: string;
@@ -1868,14 +1870,19 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   const days = useMemo(() => allStats.filter(s => s.pickerName === sel), [allStats, sel]);
   const totalLines  = days.reduce((s, d) => s + d.totalLines, 0);
   const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
-  const totalLfOrders   = days.reduce((s, d) => s + (d.lfOrders  ?? 0), 0);
-  const totalLfLines    = days.reduce((s, d) => s + (d.lfLines   ?? 0), 0);
-  const totalLfMinutes  = days.reduce((s, d) => s + (d.lfMinutes ?? 0), 0);
+  const totalLfOrders         = days.reduce((s, d) => s + (d.lfOrders  ?? 0), 0);
+  const totalLfLines          = days.reduce((s, d) => s + (d.lfLines   ?? 0), 0);
+  const totalLfMinutes        = days.reduce((s, d) => s + (d.lfMinutes ?? 0), 0);
+  const totalActiveWindowMins = days.reduce((s, d) => s + (d.activeWindowMinutes ?? 0), 0);
   const lfTimeLabel = totalLfMinutes > 0
     ? totalLfMinutes >= 60
       ? `${Math.floor(totalLfMinutes / 60)}h ${totalLfMinutes % 60}m`
       : `${totalLfMinutes}m`
     : null;
+  const lfAvgMinsPerOrderVal = totalLfOrders > 0 && totalLfMinutes > 0
+    ? (totalLfMinutes / totalLfOrders).toFixed(1) : null;
+  const lfPctOfShiftVal = totalActiveWindowMins > 0 && totalLfMinutes > 0
+    ? ((totalLfMinutes / totalActiveWindowMins) * 100).toFixed(1) : null;
   const lphDays = days.filter(s => s.linesPerHour != null);
   const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
   const avgLpo = totalOrders > 0 ? totalLines / totalOrders : 0;
@@ -1957,15 +1964,28 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
           <StatCard label="Avg Lines/Hr" value={avgLph > 0 ? avgLph.toFixed(1) : '—'} />
           <StatCard label="Lines/Order" value={avgLpo > 0 ? avgLpo.toFixed(1) : '—'} color={TEXT} />
           <StatCard label="Days Worked" value={days.length} color={TEXT} />
-          <StatCard label="Look For Orders" value={totalLfOrders > 0 ? totalLfOrders.toLocaleString() : '—'} color={totalLfOrders > 0 ? AMBER : DIM} />
-          <StatCard label="Look For Lines" value={totalLfLines > 0 ? totalLfLines.toLocaleString() : '—'} color={totalLfLines > 0 ? AMBER : DIM} />
-          <StatCard label="Look For Time" value={lfTimeLabel ?? '—'} color={lfTimeLabel ? AMBER : DIM} sub={lfTimeLabel ? 'from XLSX data' : undefined} />
           <StatCard label="vs Avg" value={vsTeam !== 0 ? `${vsTeam > 0 ? '+' : ''}${vsTeam.toFixed(1)}%` : '—'} color={vsTeam > 15 ? GREEN : vsTeam < -15 ? RED : YELLOW} />
           <StatCard label="Trend" value={trendValue} sub={trendSub || undefined} color={trendColor} />
           <StatCard label="Consistency" value={consistencyValue} sub={consistencySub || undefined} color={consistencyColor}
             onInfo={() => setShowConsistencyInfo(s => !s)} />
         </div>
       </div>
+
+      {/* ── Look For Section (only for pickers with LF history) ─────────────── */}
+      {totalLfOrders > 0 && (
+        <div style={{ ...section, borderColor: 'rgba(56,189,248,0.3)', marginBottom: 24 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: AMBER, marginBottom: 12 }}>
+            Look For Activity
+          </div>
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            <StatCard label="Look For Orders" value={totalLfOrders.toLocaleString()} color={AMBER} />
+            <StatCard label="Look For Lines"  value={totalLfLines.toLocaleString()}  color={AMBER} />
+            <StatCard label="LF Minutes"      value={lfTimeLabel ?? '—'}             color={lfTimeLabel ? AMBER : DIM} />
+            <StatCard label="Avg Mins / LF Order" value={lfAvgMinsPerOrderVal ? `${lfAvgMinsPerOrderVal}m` : '—'} color={lfAvgMinsPerOrderVal ? AMBER : DIM} />
+            <StatCard label="LF % of Shift"   value={lfPctOfShiftVal ? `${lfPctOfShiftVal}%` : '—'} color={lfPctOfShiftVal ? AMBER : DIM} />
+          </div>
+        </div>
+      )}
 
       {/* ── Benchmark Banner ─────────────────────────────────────────────────── */}
       {teamAvgLph > 0 && avgLph > 0 && (() => {
@@ -2793,9 +2813,11 @@ export default function App() {
       firstTime: r.first_time_mins,
       lastTime: r.last_time_mins,
       gapFlags,
-      lfOrders:   r.lf_orders   ?? 0,
-      lfLines:    r.lf_lines    ?? 0,
-      lfMinutes:  r.lf_minutes  ?? undefined,
+      lfOrders:          r.lf_orders            ?? 0,
+      lfLines:           r.lf_lines             ?? 0,
+      lfMinutes:         r.lf_minutes           ?? undefined,
+      lfAvgMinsPerOrder: r.lf_avg_mins_per_order ?? undefined,
+      lfPctOfShift:      r.lf_pct_of_shift      ?? undefined,
     };
   }, []);
 
