@@ -24,10 +24,14 @@ router.get("/picks", async (req, res): Promise<void> => {
     conditions.push(eq(picksTable.pickerId, pickerId));
   }
   if (startDate) {
-    conditions.push(gte(picksTable.pickedAt, new Date(startDate)));
+    const d = new Date(startDate);
+    if (isNaN(d.getTime())) { res.status(400).json({ error: "Invalid startDate" }); return; }
+    conditions.push(gte(picksTable.pickedAt, d));
   }
   if (endDate) {
-    conditions.push(lte(picksTable.pickedAt, new Date(endDate)));
+    const d = new Date(endDate);
+    if (isNaN(d.getTime())) { res.status(400).json({ error: "Invalid endDate" }); return; }
+    conditions.push(lte(picksTable.pickedAt, d));
   }
 
   const picks = await db

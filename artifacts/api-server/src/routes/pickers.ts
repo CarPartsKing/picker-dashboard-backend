@@ -22,8 +22,12 @@ router.post("/pickers", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (!parsed.data.name.trim()) {
+    res.status(400).json({ error: "name must not be blank" });
+    return;
+  }
 
-  const [picker] = await db.insert(pickersTable).values(parsed.data).returning();
+  const [picker] = await db.insert(pickersTable).values({ ...parsed.data, name: parsed.data.name.trim() }).returning();
   res.status(201).json(picker);
 });
 

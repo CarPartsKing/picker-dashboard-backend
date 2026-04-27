@@ -9,6 +9,29 @@ import { toDateStr, normalizeName } from './parseUtils';
 import { fetchStats, uploadStats, clearAllStats, fetchLivePickerData, type ApiDayStat, type UploadPayload, type LivePickerRecord } from './apiClient';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
+
+// Gap severity thresholds (minutes)
+const GAP_FLAG_MIN     = 60;   // gaps shorter than this are ignored
+const GAP_HIGH         = 120;  // >= this → 'High' severity
+const GAP_MED          = 90;   // >= this → 'Med' severity
+
+// Performance score weights and thresholds
+const SCORE_PICK_RATE_MAX    = 30;
+const SCORE_PICK_RATE_FLOOR  = 4;
+const SCORE_PICK_RATE_SCALE  = 25;   // team-ratio multiplier
+const SCORE_CONSISTENCY_MAX  = 25;
+const SCORE_CONSISTENCY_DEFAULT = 12;
+const SCORE_UPTIME_MAX       = 20;
+const SCORE_PENALTY_HIGH     = 15;   // pts deducted per High gap flag
+const SCORE_PENALTY_MED      = 9;
+const SCORE_PENALTY_LOW      = 4;
+const SCORE_BATCH_MAX        = 10;
+const SCORE_BATCH_DEFAULT    = 5;
+const SCORE_TREND_MAX        = 10;
+const SCORE_TREND_DEFAULT    = 6;
+const SCORE_LF_MAX           = 10;
+const SCORE_LF_FLOOR         = 3;
+
 const BG   = '#060D1F';
 const BG2  = 'rgba(255,255,255,0.04)';
 const BG3  = 'rgba(255,255,255,0.07)';
@@ -108,9 +131,10 @@ function removePhantomTimes(times: number[]): number[] {
   const PHANTOM_CUTOFF = 240; // 4:00 AM — before this is suspicious
   const earlyTimes = times.filter(t => t < PHANTOM_CUTOFF);
   const mainTimes  = times.filter(t => t >= PHANTOM_CUTOFF);
-  // Only strip early-morning times when there is ALSO a main-shift cluster.
-  // If ALL times are early-morning we keep them (might be a real night shift).
-  if (earlyTimes.length > 0 && mainTimes.length > 0) return mainTimes;
+  // Strip early-morning times only when a main-shift cluster also exists AND
+  // the early cluster is small (≤2 entries). A larger early cluster is more
+  // likely a cross-midnight night shift than a phantom secondary block.
+  if (earlyTimes.length > 0 && mainTimes.length > 0 && earlyTimes.length <= 2) return mainTimes;
   return times;
 }
 
@@ -167,13 +191,13 @@ function computeDayStats(data: PickerDayData): DayStats {
   const gapFlags: GapFlag[] = [];
   for (let i = 1; i < times.length; i++) {
     const gap = times[i] - times[i - 1];
-    if (gap >= 60) {
+    if (gap >= GAP_FLAG_MIN) {
       const coveredByLF = lfIntervals.some(([from, to]) => from <= times[i - 1] && to >= times[i]);
       if (!coveredByLF) {
         gapFlags.push({
           pickerName, dateStr,
           fromMinutes: times[i - 1], toMinutes: times[i], gapMinutes: gap,
-          severity: gap >= 120 ? 'High' : gap >= 90 ? 'Med' : 'Low',
+          severity: gap >= GAP_HIGH ? 'High' : gap >= GAP_MED ? 'Med' : 'Low',
         });
       }
     }
@@ -256,17 +280,17 @@ function computePickerScore(
     ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
   const ratio        = teamAvgLph > 0 ? pickerAvgLph / teamAvgLph : 0;
   // 100 % of team ≈ 21 pts; 120 %+ → 30 pts; scales linearly; floor 4
-  const pickRatePts  = Math.round(Math.max(4, Math.min(30, ratio * 25)));
+  const pickRatePts  = Math.round(Math.max(SCORE_PICK_RATE_FLOOR, Math.min(SCORE_PICK_RATE_MAX, ratio * SCORE_PICK_RATE_SCALE)));
 
   // 2. Consistency (max 25 pts) ───────────────────────────────────────────────
-  let consistencyPts = 12;
+  let consistencyPts = SCORE_CONSISTENCY_DEFAULT;
   let cvLabel        = 'Insufficient data (need ≥3 days)';
   if (lphDays.length >= 3) {
     const mean     = pickerAvgLph;
     const variance = lphDays.reduce((s, d) => s + Math.pow(d.linesPerHour! - mean, 2), 0) / lphDays.length;
     const cv       = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : 100;
     cvLabel        = `${cv.toFixed(0)}% day-to-day variation`;
-    if      (cv < 10) consistencyPts = 25;
+    if      (cv < 10) consistencyPts = SCORE_CONSISTENCY_MAX;
     else if (cv < 15) consistencyPts = 20;
     else if (cv < 25) consistencyPts = 15;
     else if (cv < 35) consistencyPts = 8;
@@ -278,11 +302,11 @@ function computePickerScore(
   const daysWorked     = Math.max(1, days.length);
   const penaltyByDay: Record<string, number> = {};
   for (const f of pickerFlags) {
-    const p = f.severity === 'High' ? 15 : f.severity === 'Med' ? 9 : 4;
+    const p = f.severity === 'High' ? SCORE_PENALTY_HIGH : f.severity === 'Med' ? SCORE_PENALTY_MED : SCORE_PENALTY_LOW;
     penaltyByDay[f.dateStr] = (penaltyByDay[f.dateStr] || 0) + p;
   }
   const totalPenalty = Object.values(penaltyByDay).reduce((s, v) => s + Math.min(v, 20), 0);
-  const uptimePts    = Math.round(Math.max(0, 20 - totalPenalty / daysWorked));
+  const uptimePts    = Math.round(Math.max(0, SCORE_UPTIME_MAX - totalPenalty / daysWorked));
   const flagLabel    = pickerFlags.length === 0
     ? 'No flags'
     : `${pickerFlags.length} flag${pickerFlags.length > 1 ? 's' : ''} across ${Object.keys(penaltyByDay).length} day(s)`;
@@ -290,20 +314,20 @@ function computePickerScore(
   // 4. Batch Efficiency (max 10 pts) ──────────────────────────────────────────
   const pickerDays = Object.values(pickerData).filter(d => d.pickerName === picker);
   const allBatches = pickerDays.flatMap(d => computeBatches(d.orders));
-  let batchPts     = 5;
+  let batchPts     = SCORE_BATCH_DEFAULT;
   let batchLabel   = 'Insufficient run data (need ≥5)';
   if (allBatches.length >= 5) {
     const avg  = allBatches.reduce((s, b) => s + b.orderCount, 0) / allBatches.length;
     batchLabel = `${avg.toFixed(1)} avg orders per run`;
-    if      (avg >= 4) batchPts = 10;
+    if      (avg >= 4) batchPts = SCORE_BATCH_MAX;
     else if (avg >= 3) batchPts = 8;
-    else if (avg >= 2) batchPts = 5;
+    else if (avg >= 2) batchPts = SCORE_BATCH_DEFAULT;
     else               batchPts = 2;
   }
 
   // 5. Trend (max 10 pts) ─────────────────────────────────────────────────────
   const sorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
-  let trendPts   = 6;
+  let trendPts   = SCORE_TREND_DEFAULT;
   let trendLabel = 'Flat';
   const calcPct  = (early: typeof sorted, late: typeof sorted) => {
     if (!early.length || !late.length) return null;
@@ -312,10 +336,10 @@ function computePickerScore(
     return ea > 0 ? ((la - ea) / ea) * 100 : 0;
   };
   const applyPct = (pct: number) => {
-    if      (pct >   5) { trendPts = 10; trendLabel = `Improving +${pct.toFixed(0)}%`; }
-    else if (pct >  -5) { trendPts =  6; trendLabel = `Flat (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%)`; }
-    else if (pct > -15) { trendPts =  3; trendLabel = `Declining ${pct.toFixed(0)}%`; }
-    else                { trendPts =  0; trendLabel = `Declining ${pct.toFixed(0)}%`; }
+    if      (pct >   5) { trendPts = SCORE_TREND_MAX; trendLabel = `Improving +${pct.toFixed(0)}%`; }
+    else if (pct >  -5) { trendPts = SCORE_TREND_DEFAULT; trendLabel = `Flat (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%)`; }
+    else if (pct > -15) { trendPts = 3; trendLabel = `Declining ${pct.toFixed(0)}%`; }
+    else                { trendPts = 0; trendLabel = `Declining ${pct.toFixed(0)}%`; }
   };
   if (sorted.length >= 6) {
     const prior = sorted.slice(-10, -5);
@@ -336,7 +360,7 @@ function computePickerScore(
   let lfPts   = 0;
   let lfLabel = 'No look-for activity recorded';
   if (pickerLfTotal > 0) {
-    lfPts   = Math.min(10, Math.max(3, Math.round((pickerLfTotal / teamLfMax) * 10)));
+    lfPts   = Math.min(SCORE_LF_MAX, Math.max(SCORE_LF_FLOOR, Math.round((pickerLfTotal / teamLfMax) * SCORE_LF_MAX)));
     lfLabel = `${pickerLfTotal} LF order${pickerLfTotal > 1 ? 's' : ''} across ${days.filter(d => (d.lfOrders ?? 0) > 0).length} day(s)`;
   }
 
@@ -3074,6 +3098,10 @@ export default function App() {
         setParseStatus({ pending: pendingRef.current.total - pendingRef.current.done, label: 'Parsing…' });
       }
     };
+    worker.onerror = (e) => {
+      setParseStatus(null);
+      console.error('Parse worker error:', e.message);
+    };
     workerRef.current = worker;
     return () => worker.terminate();
   }, []);
@@ -3094,6 +3122,11 @@ export default function App() {
           { buffer, fileName: file.name, fileIndex, fileCount: fileArr.length },
           [buffer],
         );
+      };
+      reader.onerror = () => {
+        pendingRef.current.done++;
+        if (pendingRef.current.done >= pendingRef.current.total) setParseStatus(null);
+        console.error('Failed to read file:', file.name);
       };
       reader.readAsArrayBuffer(file);
     });

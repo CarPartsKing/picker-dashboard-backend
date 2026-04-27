@@ -1,8 +1,19 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import crypto from "node:crypto";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { dashboardStatsTable, dashboardUploadsTable } from "@workspace/db/schema";
 import { desc, gte, lte, and, type SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+
+const GapFlagSchema = z.object({
+  pickerName: z.string(),
+  dateStr: z.string(),
+  fromMinutes: z.number(),
+  toMinutes: z.number(),
+  gapMinutes: z.number(),
+  severity: z.enum(["Low", "Med", "High"]),
+});
 
 const router: IRouter = Router();
 
@@ -13,7 +24,13 @@ function checkPassword(req: Request, res: Response): boolean {
     return false;
   }
   const provided = req.headers["x-upload-password"];
-  if (!provided || provided !== expected) {
+  if (!provided || Array.isArray(provided)) {
+    res.status(401).json({ error: "Invalid upload password" });
+    return false;
+  }
+  const provBuf = Buffer.from(provided);
+  const expBuf = Buffer.from(expected);
+  if (provBuf.length !== expBuf.length || !crypto.timingSafeEqual(provBuf, expBuf)) {
     res.status(401).json({ error: "Invalid upload password" });
     return false;
   }
@@ -59,7 +76,7 @@ router.post("/dashboard/upload", async (req: Request, res: Response): Promise<vo
     ordersPerHour: s.ordersPerHour ?? null,
     avgLinesPerOrder: s.avgLinesPerOrder ?? null,
     activeWindowMinutes: s.activeWindowMinutes ?? null,
-    gapFlags: (s.gapFlags ?? []) as any,
+    gapFlags: z.array(GapFlagSchema).default([]).parse(s.gapFlags ?? []),
     performanceRating: s.performanceRating ?? null,
   }));
 
@@ -124,7 +141,7 @@ router.delete("/dashboard/stats", async (req: Request, res: Response): Promise<v
   res.json({ cleared: true });
 });
 
-const EXTERNAL_API = "https://picker-dashboard-backend.onrender.com/api/picker-data";
+const EXTERNAL_API = process.env.EXTERNAL_API_URL ?? "https://picker-dashboard-backend.onrender.com/api/picker-data";
 
 router.get("/dashboard/live-data", async (_req: Request, res: Response): Promise<void> => {
   try {

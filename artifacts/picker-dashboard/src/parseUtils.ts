@@ -91,8 +91,8 @@ export function parseTime(val: unknown): number | null {
     let h = parseInt(hs, 10);
     const m = parseInt(ms, 10);
     if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 12 && m >= 0 && m <= 59 && (isPm || isAm)) {
-      if (isPm && h < 12) h += 12;
-      if (isAm && h === 12) h = 0;
+      if (isPm && h !== 12) h += 12;  // 12 PM stays 12; 1–11 PM add 12
+      if (isAm && h === 12) h = 0;    // 12 AM → midnight
       return h * 60 + m;
     }
     if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) return h * 60 + m;

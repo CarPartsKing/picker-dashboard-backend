@@ -67,8 +67,7 @@ router.get("/analytics/leaderboard", async (req, res): Promise<void> => {
 router.get("/analytics/summary", async (_req, res): Promise<void> => {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStart = new Date(todayStart.getTime() - todayStart.getDay() * 24 * 60 * 60 * 1000);
 
   const [totalPickersRow] = await db
     .select({ total: count() })

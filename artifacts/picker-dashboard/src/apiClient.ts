@@ -61,6 +61,14 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return res;
 }
 
+async function parseJson<T>(res: Response, label: string): Promise<T> {
+  try {
+    return await res.json() as T;
+  } catch {
+    throw new Error(`${label}: response was not valid JSON (status ${res.status})`);
+  }
+}
+
 export async function fetchStats(from?: string, to?: string): Promise<ApiDayStat[]> {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
@@ -68,7 +76,7 @@ export async function fetchStats(from?: string, to?: string): Promise<ApiDayStat
   const query = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/dashboard/stats${query}`);
   if (!res.ok) throw new Error(`Failed to fetch stats: ${res.status}`);
-  return res.json();
+  return parseJson<ApiDayStat[]>(res, 'fetchStats');
 }
 
 export async function uploadStats(payload: UploadPayload, password: string): Promise<UploadResult> {
@@ -85,7 +93,7 @@ export async function uploadStats(payload: UploadPayload, password: string): Pro
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? `Upload failed: ${res.status}`);
   }
-  return res.json();
+  return parseJson<UploadResult>(res, 'uploadStats');
 }
 
 export async function fetchUploads(): Promise<ApiUploadRecord[]> {
@@ -129,7 +137,7 @@ export async function fetchLivePickerData(): Promise<LivePickerResponse> {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? `Live data fetch failed: ${res.status}`);
   }
-  return res.json();
+  return parseJson<LivePickerResponse>(res, 'fetchLivePickerData');
 }
 
 export async function clearAllStats(password: string): Promise<void> {

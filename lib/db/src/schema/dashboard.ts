@@ -9,6 +9,19 @@ export type GapFlagRecord = {
   severity: 'Low' | 'Med' | 'High';
 };
 
+export function isGapFlagRecord(v: unknown): v is GapFlagRecord {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.pickerName === 'string' &&
+    typeof r.dateStr === 'string' &&
+    typeof r.fromMinutes === 'number' &&
+    typeof r.toMinutes === 'number' &&
+    typeof r.gapMinutes === 'number' &&
+    (r.severity === 'Low' || r.severity === 'Med' || r.severity === 'High')
+  );
+}
+
 export const dashboardStatsTable = pgTable('dashboard_stats', {
   id: serial('id').primaryKey(),
   pickerName: text('picker_name').notNull(),

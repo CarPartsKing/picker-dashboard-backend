@@ -11,6 +11,15 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+pool.on('error', (err) => {
+  console.error('Database pool error:', err);
+});
+
+process.on('SIGTERM', () => {
+  pool.end().catch((err) => console.error('Error closing pool on SIGTERM:', err));
+});
+
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
