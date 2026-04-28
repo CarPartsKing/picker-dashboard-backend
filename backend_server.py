@@ -59,9 +59,10 @@ class PickerRecord(BaseModel):
     lf_pct_of_shift: float | None = None
 
 
-class IngestPayload(BaseModel):
-    records: list[PickerRecord]
-    exported_at: str | None = None
+class ExportPayload(BaseModel):
+    data: list[PickerRecord]
+    exportedAt: str | None = None
+    recordCount: int | None = None
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -73,19 +74,19 @@ async def health() -> dict[str, str]:
 
 @app.post("/api/picker-data")
 async def receive_picker_data(
-    payload: IngestPayload,
+    payload: ExportPayload,
     x_api_key: str | None = Header(None),
 ) -> dict[str, Any]:
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    if not payload.records:
-        raise HTTPException(status_code=400, detail="records must not be empty")
+    if not payload.data:
+        raise HTTPException(status_code=400, detail="data must not be empty")
 
-    exported_at = payload.exported_at or datetime.now(timezone.utc).isoformat()
+    exported_at = payload.exportedAt or datetime.now(timezone.utc).isoformat()
 
     rows = [
         {**r.model_dump(), "exported_at": exported_at}
-        for r in payload.records
+        for r in payload.data
     ]
 
     async with httpx.AsyncClient(timeout=15) as client:
