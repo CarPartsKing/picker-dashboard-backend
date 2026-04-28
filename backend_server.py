@@ -31,38 +31,75 @@ def _supabase_headers() -> dict[str, str]:
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
+# Field names match the camelCase keys sent by Apps Script.
 
 class Gap(BaseModel):
     fromMins: float
     toMins: float
     gapMins: float
+    severity: str | None = None
 
 
 class PickerRecord(BaseModel):
     date: str
     picker: str
     orders: int
-    total_lines: int
-    avg_lines_per_order: float
-    active_hrs: float | None = None
-    lines_per_hr: float | None = None
-    orders_per_hr: float | None = None
-    first_time_mins: float | None = None
-    last_time_mins: float | None = None
-    has_gaps: bool = False
+    totalLines: int
+    avgLinesPerOrder: float
+    activeHrs: float | None = None
+    linesPerHr: float | None = None
+    ordersPerHr: float | None = None
+    firstTimeMins: float | None = None
+    lastTimeMins: float | None = None
+    hasGaps: bool = False
     gaps: list[Gap] = []
-    order_detail: list[Any] = []
-    lf_orders: int | None = None
-    lf_lines: int | None = None
-    lf_minutes: float | None = None
-    lf_avg_mins_per_order: float | None = None
-    lf_pct_of_shift: float | None = None
+    orderDetail: list[Any] = []
+    lfOrders: int = 0
+    lfLines: int = 0
+    lfMinutes: float = 0
+    lfAvgMinsPerOrder: float | None = None
+    lfPctOfShift: float | None = None
+    rpOrders: int = 0
+    rpLines: int = 0
+    soOrders: int = 0
+    soLines: int = 0
 
 
 class ExportPayload(BaseModel):
     data: list[PickerRecord]
     exportedAt: str | None = None
     recordCount: int | None = None
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _to_row(r: PickerRecord, exported_at: str) -> dict[str, Any]:
+    """Map camelCase PickerRecord fields to snake_case Supabase columns."""
+    return {
+        "date":                  r.date,
+        "picker":                r.picker,
+        "orders":                r.orders,
+        "total_lines":           r.totalLines,
+        "avg_lines_per_order":   r.avgLinesPerOrder,
+        "active_hrs":            r.activeHrs,
+        "lines_per_hr":          r.linesPerHr,
+        "orders_per_hr":         r.ordersPerHr,
+        "first_time_mins":       r.firstTimeMins,
+        "last_time_mins":        r.lastTimeMins,
+        "has_gaps":              r.hasGaps,
+        "gaps":                  [g.model_dump() for g in r.gaps],
+        "order_detail":          r.orderDetail,
+        "lf_orders":             r.lfOrders,
+        "lf_lines":              r.lfLines,
+        "lf_minutes":            r.lfMinutes,
+        "lf_avg_mins_per_order": r.lfAvgMinsPerOrder,
+        "lf_pct_of_shift":       r.lfPctOfShift,
+        "rp_orders":             r.rpOrders,
+        "rp_lines":              r.rpLines,
+        "so_orders":             r.soOrders,
+        "so_lines":              r.soLines,
+        "exported_at":           exported_at,
+    }
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -83,11 +120,7 @@ async def receive_picker_data(
         raise HTTPException(status_code=400, detail="data must not be empty")
 
     exported_at = payload.exportedAt or datetime.now(timezone.utc).isoformat()
-
-    rows = [
-        {**r.model_dump(), "exported_at": exported_at}
-        for r in payload.data
-    ]
+    rows = [_to_row(r, exported_at) for r in payload.data]
 
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.post(
@@ -96,6 +129,7 @@ async def receive_picker_data(
                 **_supabase_headers(),
                 "Prefer": "resolution=merge-duplicates,return=minimal",
             },
+            params={"on_conflict": "date,picker"},
             json=rows,
         )
 
