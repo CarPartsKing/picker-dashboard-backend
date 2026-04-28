@@ -102,6 +102,43 @@ def _to_row(r: PickerRecord, exported_at: str) -> dict[str, Any]:
     }
 
 
+def _dedup(records: list[PickerRecord]) -> list[PickerRecord]:
+    """Collapse duplicate picker+date rows within a single batch.
+
+    Postgres raises "ON CONFLICT DO UPDATE command cannot affect row a second
+    time" when the same conflict key appears more than once in one upsert
+    statement. Merge duplicates here before they reach Supabase.
+    """
+    merged: dict[tuple[str, str], PickerRecord] = {}
+    for r in records:
+        key = (r.date, r.picker)
+        if key not in merged:
+            merged[key] = r.model_copy(deep=True)
+            continue
+        b = merged[key]
+        # additive counters
+        b.orders   += r.orders
+        b.totalLines += r.totalLines
+        b.lfOrders += r.lfOrders
+        b.lfLines  += r.lfLines
+        b.lfMinutes += r.lfMinutes
+        b.rpOrders += r.rpOrders
+        b.rpLines  += r.rpLines
+        b.soOrders += r.soOrders
+        b.soLines  += r.soLines
+        # first non-null wins for rate/time fields
+        if b.activeHrs     is None: b.activeHrs     = r.activeHrs
+        if b.linesPerHr    is None: b.linesPerHr    = r.linesPerHr
+        if b.ordersPerHr   is None: b.ordersPerHr   = r.ordersPerHr
+        if b.firstTimeMins is None: b.firstTimeMins = r.firstTimeMins
+        if b.lastTimeMins  is None: b.lastTimeMins  = r.lastTimeMins
+        # union list/flag fields
+        b.hasGaps     = b.hasGaps or r.hasGaps
+        b.gaps        = b.gaps + r.gaps
+        b.orderDetail = b.orderDetail + r.orderDetail
+    return list(merged.values())
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/healthz")
@@ -120,7 +157,8 @@ async def receive_picker_data(
         raise HTTPException(status_code=400, detail="data must not be empty")
 
     exported_at = payload.exportedAt or datetime.now(timezone.utc).isoformat()
-    rows = [_to_row(r, exported_at) for r in payload.data]
+    records = _dedup(payload.data)
+    rows = [_to_row(r, exported_at) for r in records]
 
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.post(
