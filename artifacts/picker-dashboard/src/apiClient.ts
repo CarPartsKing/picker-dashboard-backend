@@ -115,7 +115,7 @@ export interface LivePickerRecord {
   first_time_mins: number | null;
   last_time_mins: number | null;
   has_gaps: boolean;
-  gaps: Array<{ fromMins: number; toMins: number; gapMins: number }>;
+  gaps: Array<{ fromMins: number; toMins: number; gapMins: number; severity?: string }>;
   order_detail: unknown[];
   exported_at: string;
   lf_orders: number | null;
