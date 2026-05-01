@@ -11,9 +11,9 @@ import { fetchStats, uploadStats, clearAllStats, fetchLivePickerData, type ApiDa
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 // Gap severity thresholds (minutes)
-const GAP_FLAG_MIN     = 60;   // gaps shorter than this are ignored
-const GAP_HIGH         = 120;  // >= this → 'High' severity
-const GAP_MED          = 90;   // >= this → 'Med' severity
+const GAP_FLAG_MIN     = 90;   // gaps shorter than this are ignored
+const GAP_MED          = 120;  // >= this → 'Med' severity  (120–179 min)
+const GAP_HIGH         = 180;  // >= this → 'High' severity (180+ min)
 
 // Performance score weights and thresholds
 const SCORE_PICK_RATE_MAX    = 30;
@@ -142,6 +142,9 @@ function computeDayStats(data: PickerDayData): DayStats {
   const { pickerName, dateStr, date, orders } = data;
   const totalOrders = orders.length;
   const totalLines  = orders.reduce((s, o) => s + o.linesPicked, 0);
+  // timeMinutes values are already parsed integers (minutes since midnight).
+  // Sort numerically — NOT lexicographically — so "1:30" (90) never precedes
+  // "12:30" (750) and gap spans are always computed in chronological order.
   const rawTimes = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
   const times = removePhantomTimes(rawTimes).sort((a, b) => a - b);
 
@@ -704,9 +707,9 @@ const KPI_META = [
     what: 'How much of your shift you spend actively picking, measured by unexplained gap flags — periods between two consecutive runs longer than expected with no recorded picks.',
     rows: [
       ['No flags',                          '20 pts'],
-      ['Low flag (60–89 min gap)',           '−4 pts per flag-day'],
-      ['Med flag (90–119 min gap)',          '−9 pts per flag-day'],
-      ['High flag (120+ min gap)',           '−15 pts per flag-day'],
+      ['Low flag (90–119 min gap)',           '−4 pts per flag-day'],
+      ['Med flag (120–179 min gap)',         '−9 pts per flag-day'],
+      ['High flag (180+ min gap)',           '−15 pts per flag-day'],
     ],
     note: 'Penalties are averaged across all days worked, so occasional flags matter less the more days you have on record.',
   },
