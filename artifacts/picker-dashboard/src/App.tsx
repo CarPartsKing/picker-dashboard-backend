@@ -99,7 +99,11 @@ interface FileHistoryEntry {
 
 // ─── KPI COMPUTATION ──────────────────────────────────────────────────────────
 function fmtMin(m: number): string {
-  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+  const h = Math.floor(m / 60);
+  const mins = m % 60;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(mins).padStart(2, '0')} ${period}`;
 }
 function fmtDate(ds: string): string {
   const d = new Date(ds + 'T12:00:00');
