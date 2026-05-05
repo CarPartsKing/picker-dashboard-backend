@@ -126,12 +126,16 @@ def _dedup(records: list[PickerRecord]) -> list[PickerRecord]:
         b.rpLines  += r.rpLines
         b.soOrders += r.soOrders
         b.soLines  += r.soLines
-        # first non-null wins for rate/time fields
-        if b.activeHrs     is None: b.activeHrs     = r.activeHrs
-        if b.linesPerHr    is None: b.linesPerHr    = r.linesPerHr
-        if b.ordersPerHr   is None: b.ordersPerHr   = r.ordersPerHr
-        if b.firstTimeMins is None: b.firstTimeMins = r.firstTimeMins
-        if b.lastTimeMins  is None: b.lastTimeMins  = r.lastTimeMins
+        # time window: earliest start, latest end; recalculate derived rates
+        if r.firstTimeMins is not None:
+            b.firstTimeMins = r.firstTimeMins if b.firstTimeMins is None else min(b.firstTimeMins, r.firstTimeMins)
+        if r.lastTimeMins is not None:
+            b.lastTimeMins = r.lastTimeMins if b.lastTimeMins is None else max(b.lastTimeMins, r.lastTimeMins)
+        if b.firstTimeMins is not None and b.lastTimeMins is not None:
+            b.activeHrs = (b.lastTimeMins - b.firstTimeMins) / 60
+        if b.activeHrs:
+            b.linesPerHr  = b.totalLines / b.activeHrs
+            b.ordersPerHr = b.orders / b.activeHrs
         # union list/flag fields
         b.hasGaps     = b.hasGaps or r.hasGaps
         b.gaps        = b.gaps + r.gaps
