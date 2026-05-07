@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -143,6 +144,50 @@ def _dedup(records: list[PickerRecord]) -> list[PickerRecord]:
     return list(merged.values())
 
 
+async def _update_lf_specialist(client: httpx.AsyncClient, pickers: list[str]) -> None:
+    """Recalculate is_lf_specialist for each picker and patch all their rows.
+
+    A picker qualifies when, across all tracked days:
+      - average lf_orders >= 10
+      - average lf_pct_of_shift >= 30
+      - days with lf_orders > 0 >= 15
+    """
+    if not pickers or not SUPABASE_URL:
+        return
+
+    picker_filter = "(" + ",".join(pickers) + ")"
+    res = await client.get(
+        f"{SUPABASE_URL}/rest/v1/{TABLE}",
+        headers=_supabase_headers(),
+        params={
+            "picker": f"in.{picker_filter}",
+            "select": "picker,lf_orders,lf_pct_of_shift",
+        },
+    )
+    if res.status_code != 200:
+        return  # best-effort; don't fail the upsert
+
+    by_picker: dict[str, list[dict]] = defaultdict(list)
+    for row in res.json():
+        by_picker[row["picker"]].append(row)
+
+    for picker, rows in by_picker.items():
+        n = len(rows)
+        avg_lf_orders = sum((r.get("lf_orders") or 0) for r in rows) / n
+        pct_vals = [r["lf_pct_of_shift"] for r in rows if r.get("lf_pct_of_shift") is not None]
+        avg_lf_pct = sum(pct_vals) / len(pct_vals) if pct_vals else 0.0
+        days_with_lf = sum(1 for r in rows if (r.get("lf_orders") or 0) > 0)
+
+        is_specialist = avg_lf_orders >= 10 and avg_lf_pct >= 30 and days_with_lf >= 15
+
+        await client.patch(
+            f"{SUPABASE_URL}/rest/v1/{TABLE}",
+            headers={**_supabase_headers(), "Prefer": "return=minimal"},
+            params={"picker": f"eq.{picker}"},
+            json={"is_lf_specialist": is_specialist},
+        )
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/healthz")
@@ -164,7 +209,7 @@ async def receive_picker_data(
     records = _dedup(payload.data)
     rows = [_to_row(r, exported_at) for r in records]
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         res = await client.post(
             f"{SUPABASE_URL}/rest/v1/{TABLE}",
             headers={
@@ -175,8 +220,11 @@ async def receive_picker_data(
             json=rows,
         )
 
-    if res.status_code not in (200, 201):
-        raise HTTPException(status_code=502, detail=f"Supabase error {res.status_code}: {res.text}")
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail=f"Supabase error {res.status_code}: {res.text}")
+
+        pickers = list({r.picker for r in records})
+        await _update_lf_specialist(client, pickers)
 
     return {"inserted": len(rows), "exported_at": exported_at}
 
