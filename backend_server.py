@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -126,17 +127,65 @@ def _dedup(records: list[PickerRecord]) -> list[PickerRecord]:
         b.rpLines  += r.rpLines
         b.soOrders += r.soOrders
         b.soLines  += r.soLines
-        # first non-null wins for rate/time fields
-        if b.activeHrs     is None: b.activeHrs     = r.activeHrs
-        if b.linesPerHr    is None: b.linesPerHr    = r.linesPerHr
-        if b.ordersPerHr   is None: b.ordersPerHr   = r.ordersPerHr
-        if b.firstTimeMins is None: b.firstTimeMins = r.firstTimeMins
-        if b.lastTimeMins  is None: b.lastTimeMins  = r.lastTimeMins
+        # time window: earliest start, latest end; recalculate derived rates
+        if r.firstTimeMins is not None:
+            b.firstTimeMins = r.firstTimeMins if b.firstTimeMins is None else min(b.firstTimeMins, r.firstTimeMins)
+        if r.lastTimeMins is not None:
+            b.lastTimeMins = r.lastTimeMins if b.lastTimeMins is None else max(b.lastTimeMins, r.lastTimeMins)
+        if b.firstTimeMins is not None and b.lastTimeMins is not None:
+            b.activeHrs = (b.lastTimeMins - b.firstTimeMins) / 60
+        if b.activeHrs:
+            b.linesPerHr  = b.totalLines / b.activeHrs
+            b.ordersPerHr = b.orders / b.activeHrs
         # union list/flag fields
         b.hasGaps     = b.hasGaps or r.hasGaps
         b.gaps        = b.gaps + r.gaps
         b.orderDetail = b.orderDetail + r.orderDetail
     return list(merged.values())
+
+
+async def _update_lf_specialist(client: httpx.AsyncClient, pickers: list[str]) -> None:
+    """Recalculate is_lf_specialist for each picker and patch all their rows.
+
+    A picker qualifies when, across all tracked days:
+      - average lf_orders >= 10
+      - average lf_pct_of_shift >= 30
+      - days with lf_orders > 0 >= 15
+    """
+    if not pickers or not SUPABASE_URL:
+        return
+
+    picker_filter = "(" + ",".join(pickers) + ")"
+    res = await client.get(
+        f"{SUPABASE_URL}/rest/v1/{TABLE}",
+        headers=_supabase_headers(),
+        params={
+            "picker": f"in.{picker_filter}",
+            "select": "picker,lf_orders,lf_pct_of_shift",
+        },
+    )
+    if res.status_code != 200:
+        return  # best-effort; don't fail the upsert
+
+    by_picker: dict[str, list[dict]] = defaultdict(list)
+    for row in res.json():
+        by_picker[row["picker"]].append(row)
+
+    for picker, rows in by_picker.items():
+        n = len(rows)
+        avg_lf_orders = sum((r.get("lf_orders") or 0) for r in rows) / n
+        pct_vals = [r["lf_pct_of_shift"] for r in rows if r.get("lf_pct_of_shift") is not None]
+        avg_lf_pct = sum(pct_vals) / len(pct_vals) if pct_vals else 0.0
+        days_with_lf = sum(1 for r in rows if (r.get("lf_orders") or 0) > 0)
+
+        is_specialist = avg_lf_orders >= 10 and avg_lf_pct >= 30 and days_with_lf >= 15
+
+        await client.patch(
+            f"{SUPABASE_URL}/rest/v1/{TABLE}",
+            headers={**_supabase_headers(), "Prefer": "return=minimal"},
+            params={"picker": f"eq.{picker}"},
+            json={"is_lf_specialist": is_specialist},
+        )
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -160,7 +209,7 @@ async def receive_picker_data(
     records = _dedup(payload.data)
     rows = [_to_row(r, exported_at) for r in records]
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         res = await client.post(
             f"{SUPABASE_URL}/rest/v1/{TABLE}",
             headers={
@@ -171,8 +220,11 @@ async def receive_picker_data(
             json=rows,
         )
 
-    if res.status_code not in (200, 201):
-        raise HTTPException(status_code=502, detail=f"Supabase error {res.status_code}: {res.text}")
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail=f"Supabase error {res.status_code}: {res.text}")
+
+        pickers = list({r.picker for r in records})
+        await _update_lf_specialist(client, pickers)
 
     return {"inserted": len(rows), "exported_at": exported_at}
 
