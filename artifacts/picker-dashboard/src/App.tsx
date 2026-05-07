@@ -80,6 +80,7 @@ interface DayStats {
   lfMinutes?: number;
   lfAvgMinsPerOrder?: number;
   lfPctOfShift?: number;
+  isLFSpecialist?: boolean;
 }
 interface GapFlag {
   pickerName: string;
@@ -1043,7 +1044,7 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: TEXT }}>{sel}</div>
-                {allStats.filter(s => s.pickerName === sel).some(s => (s.lfOrders ?? 0) > 0) && (
+                {allStats.filter(s => s.pickerName === sel).some(s => s.isLFSpecialist === true) && (
                   <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: AMBER, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', borderRadius: 20, padding: '3px 10px' }}>
                     Look For Specialist
                   </span>
@@ -1235,7 +1236,7 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
     const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
     const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
     const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
-    const isLFSpecialist = days.some(d => (d.lfOrders ?? 0) > 0);
+    const isLFSpecialist = days.some(d => d.isLFSpecialist === true);
     return { name, avgLph, totalLines, totalOrders, daysWorked: days.length, color: PICKER_COLORS[i % PICKER_COLORS.length], isLFSpecialist };
   }).sort((a, b) => b.avgLph - a.avgLph), [allStats, pickerNames]);
 
@@ -2937,6 +2938,7 @@ export default function App() {
       lfMinutes:         r.lf_minutes           ?? undefined,
       lfAvgMinsPerOrder: r.lf_avg_mins_per_order ?? undefined,
       lfPctOfShift:      r.lf_pct_of_shift      ?? undefined,
+      isLFSpecialist:    r.is_lf_specialist     ?? false,
     };
   }, []);
 

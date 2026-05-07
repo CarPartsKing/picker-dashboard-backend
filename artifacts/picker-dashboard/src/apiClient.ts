@@ -123,6 +123,7 @@ export interface LivePickerRecord {
   lf_minutes: number | null;
   lf_avg_mins_per_order: number | null;
   lf_pct_of_shift: number | null;
+  is_lf_specialist: boolean;
 }
 
 export interface LivePickerResponse {
