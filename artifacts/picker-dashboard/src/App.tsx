@@ -2017,7 +2017,7 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
         <div style={{ fontSize: 10, color: DIM, marginBottom: 4, letterSpacing: '0.09em', textTransform: 'uppercase' }}>Select Picker</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <Dropdown value={sel} onChange={setSel} options={pickerNames} />
-          {totalLfOrders > 0 && (
+          {days.some(d => d.isLFSpecialist === true) && (
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: AMBER, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', borderRadius: 20, padding: '3px 10px' }}>
               Look For Specialist
             </span>
