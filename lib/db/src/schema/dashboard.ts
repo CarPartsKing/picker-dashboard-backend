@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, real, integer, json, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, real, integer, json, unique, boolean } from "drizzle-orm/pg-core";
 
 export type GapFlagRecord = {
   pickerName: string;
@@ -34,6 +34,14 @@ export const dashboardStatsTable = pgTable('dashboard_stats', {
   activeWindowMinutes: real('active_window_minutes'),
   gapFlags: json('gap_flags').$type<GapFlagRecord[]>().notNull().default([]),
   performanceRating: text('performance_rating'),
+  firstTimeMins: integer('first_time_mins'),
+  lastTimeMins: integer('last_time_mins'),
+  lfOrders: integer('lf_orders'),
+  lfLines: integer('lf_lines'),
+  lfMinutes: real('lf_minutes'),
+  lfAvgMinsPerOrder: real('lf_avg_mins_per_order'),
+  lfPctOfShift: real('lf_pct_of_shift'),
+  isLfSpecialist: boolean('is_lf_specialist'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique('unique_picker_date').on(t.pickerName, t.dateStr),

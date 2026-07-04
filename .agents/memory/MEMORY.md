@@ -1,0 +1,1 @@
+- [Render live-feed quirks](render-feed-quirks.md) — external feed caps at ~1000 rolling records (we auto-archive to DB); gap/time/name bugs are upstream, user-owned.

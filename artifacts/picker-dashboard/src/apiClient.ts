@@ -19,6 +19,14 @@ export interface ApiDayStat {
     severity: "Low" | "Med" | "High";
   }>;
   performanceRating: string | null;
+  firstTimeMins: number | null;
+  lastTimeMins: number | null;
+  lfOrders: number | null;
+  lfLines: number | null;
+  lfMinutes: number | null;
+  lfAvgMinsPerOrder: number | null;
+  lfPctOfShift: number | null;
+  isLfSpecialist: boolean | null;
   createdAt: string;
 }
 

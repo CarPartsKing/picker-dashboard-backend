@@ -143,7 +143,138 @@ router.delete("/dashboard/stats", async (req: Request, res: Response): Promise<v
 
 const EXTERNAL_API = process.env.EXTERNAL_API_URL ?? "https://picker-dashboard-backend.onrender.com/api/picker-data";
 
-router.get("/dashboard/live-data", async (_req: Request, res: Response): Promise<void> => {
+// ── Live-feed auto-archive ──────────────────────────────────────────────────
+// The Render backend caps its export at ~1000 records (rolling window), so
+// older days silently fall off the feed. Every time we proxy the live feed we
+// also upsert the records into dashboard_stats so history is preserved.
+
+const LiveGapSchema = z.object({
+  fromMins: z.number(),
+  toMins: z.number(),
+  gapMins: z.number(),
+});
+
+const LiveRecordSchema = z.object({
+  date: z.string(),
+  picker: z.string(),
+  orders: z.number().nullish(),
+  total_lines: z.number().nullish(),
+  avg_lines_per_order: z.number().nullish(),
+  active_hrs: z.number().nullish(),
+  lines_per_hr: z.number().nullish(),
+  orders_per_hr: z.number().nullish(),
+  first_time_mins: z.number().nullish(),
+  last_time_mins: z.number().nullish(),
+  gaps: z.array(LiveGapSchema).nullish(),
+  lf_orders: z.number().nullish(),
+  lf_lines: z.number().nullish(),
+  lf_minutes: z.number().nullish(),
+  lf_avg_mins_per_order: z.number().nullish(),
+  lf_pct_of_shift: z.number().nullish(),
+  is_lf_specialist: z.boolean().nullish(),
+});
+
+const LiveResponseSchema = z.object({
+  data: z.array(LiveRecordSchema),
+});
+
+// Mirrors the dashboard frontend's normalizeName so archived rows merge
+// cleanly with live rows on the picker_name|date_str key.
+function normalizeName(raw: string): string {
+  return raw.trim().split(/\s+/).map((word) => {
+    if (!word) return word;
+    if (word.length <= 3 && /^[A-Z]+$/.test(word)) return word;
+    return word[0].toUpperCase() + word.slice(1).toLowerCase();
+  }).join(" ");
+}
+
+const ARCHIVE_MIN_INTERVAL_MS = 10 * 60 * 1000;
+let lastArchiveAt = 0;
+let archiveInFlight = false;
+
+type RequestLogger = Request["log"];
+
+async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void> {
+  const parsed = LiveResponseSchema.safeParse(body);
+  if (!parsed.success) {
+    log.error({ issues: parsed.error.issues.slice(0, 3) }, "live-data archive: unexpected upstream shape, skipping");
+    return;
+  }
+
+  // Dedupe on normalized picker|date (feed may contain raw-name variants).
+  const byKey = new Map<string, (typeof parsed.data.data)[number]>();
+  for (const r of parsed.data.data) {
+    if (!r.date || !r.picker) continue;
+    byKey.set(`${normalizeName(r.picker)}|${r.date}`, r);
+  }
+
+  const rows = [...byKey.values()].map((r) => {
+    const pickerName = normalizeName(r.picker);
+    const gapFlags = (r.gaps ?? [])
+      .filter((g) => g.gapMins >= 60)
+      .map((g) => ({
+        pickerName,
+        dateStr: r.date,
+        fromMinutes: g.fromMins,
+        toMinutes: g.toMins,
+        gapMinutes: g.gapMins,
+        severity: (g.gapMins >= 120 ? "High" : g.gapMins >= 90 ? "Med" : "Low") as "Low" | "Med" | "High",
+      }));
+    return {
+      pickerName,
+      dateStr: r.date,
+      totalLines: r.total_lines ?? 0,
+      totalOrders: r.orders ?? 0,
+      linesPerHour: r.lines_per_hr ?? null,
+      ordersPerHour: r.orders_per_hr ?? null,
+      avgLinesPerOrder: r.avg_lines_per_order ?? null,
+      activeWindowMinutes: r.active_hrs != null ? r.active_hrs * 60 : null,
+      gapFlags,
+      firstTimeMins: r.first_time_mins != null ? Math.round(r.first_time_mins) : null,
+      lastTimeMins: r.last_time_mins != null ? Math.round(r.last_time_mins) : null,
+      lfOrders: r.lf_orders ?? null,
+      lfLines: r.lf_lines ?? null,
+      lfMinutes: r.lf_minutes ?? null,
+      lfAvgMinsPerOrder: r.lf_avg_mins_per_order ?? null,
+      lfPctOfShift: r.lf_pct_of_shift ?? null,
+      isLfSpecialist: r.is_lf_specialist ?? null,
+    };
+  });
+
+  if (rows.length === 0) return;
+
+  const CHUNK = 250;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    await db
+      .insert(dashboardStatsTable)
+      .values(chunk)
+      .onConflictDoUpdate({
+        target: [dashboardStatsTable.pickerName, dashboardStatsTable.dateStr],
+        set: {
+          totalLines: sql`excluded.total_lines`,
+          totalOrders: sql`excluded.total_orders`,
+          linesPerHour: sql`excluded.lines_per_hour`,
+          ordersPerHour: sql`excluded.orders_per_hour`,
+          avgLinesPerOrder: sql`excluded.avg_lines_per_order`,
+          activeWindowMinutes: sql`excluded.active_window_minutes`,
+          gapFlags: sql`excluded.gap_flags`,
+          firstTimeMins: sql`excluded.first_time_mins`,
+          lastTimeMins: sql`excluded.last_time_mins`,
+          lfOrders: sql`excluded.lf_orders`,
+          lfLines: sql`excluded.lf_lines`,
+          lfMinutes: sql`excluded.lf_minutes`,
+          lfAvgMinsPerOrder: sql`excluded.lf_avg_mins_per_order`,
+          lfPctOfShift: sql`excluded.lf_pct_of_shift`,
+          isLfSpecialist: sql`excluded.is_lf_specialist`,
+        },
+      });
+  }
+
+  log.info({ archivedRows: rows.length }, "live-data archive: upserted feed snapshot");
+}
+
+router.get("/dashboard/live-data", async (req: Request, res: Response): Promise<void> => {
   try {
     const upstream = await fetch(EXTERNAL_API, {
       headers: { Accept: "application/json" },
@@ -155,6 +286,20 @@ router.get("/dashboard/live-data", async (_req: Request, res: Response): Promise
     }
     const body = await upstream.json() as unknown;
     res.json(body);
+
+    const now = Date.now();
+    if (!archiveInFlight && now - lastArchiveAt >= ARCHIVE_MIN_INTERVAL_MS) {
+      archiveInFlight = true;
+      lastArchiveAt = now;
+      const log = req.log;
+      void archiveLiveData(body, log)
+        .catch((err: unknown) => {
+          log.error({ err }, "live-data archive failed");
+        })
+        .finally(() => {
+          archiveInFlight = false;
+        });
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(502).json({ error: `Failed to reach upstream: ${msg}` });

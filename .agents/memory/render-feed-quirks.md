@@ -1,0 +1,15 @@
+---
+name: Render live-feed quirks
+description: External picker-data feed (user-controlled Render backend) limits and known data bugs
+---
+The dashboard's live data comes from a user-controlled external backend (picker-dashboard-backend.onrender.com), fed by Google Sheets via Apps Script. We cannot fix its code — only the user can.
+
+**Rolling cap:** The feed exports at most ~1000 records (rolling window). Older days silently fall off. **Why:** discovered Jul 2026 when April data vanished. The api-server's live-data route now auto-archives every pull into `dashboard_stats` — that DB is the only durable history.
+
+**Known upstream bugs (owner = user/Render, not our code):**
+- Gap detection sorts raw time strings instead of parsed minutes → gaps that start exactly at first_time_mins (~33 records). L/Hr parsing was fixed separately; the gap path was not.
+- Pickers type 12-hour colon times (e.g. "5:09" = 5:09 PM); Render converts to 24h. Some pickers' formats still fail (Brandon, Bryan never get L/Hr).
+- Sherri's active windows are systematically tiny → inflated L/Hr (>100).
+- Name duplicates come from the sheet: Ossie vs 0ssie (digit zero), Taurean/Taureen, Will/William, Andy/Andy!, etc. Our normalizeName does Title Case but doesn't strip punctuation.
+
+**How to apply:** when data looks wrong, first check whether it's a feed-side bug (audit via `curl localhost:80/api/dashboard/live-data`) before touching dashboard code.

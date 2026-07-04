@@ -3168,10 +3168,16 @@ export default function App() {
       ordersPerHour: s.ordersPerHour,
       avgLinesPerOrder: s.avgLinesPerOrder ?? 0,
       activeWindowMinutes: s.activeWindowMinutes,
-      firstTime: null,
-      lastTime: null,
+      firstTime: s.firstTimeMins ?? null,
+      lastTime: s.lastTimeMins ?? null,
       gapFlags: (s.gapFlags ?? []) as GapFlag[],
       performanceRating: (s.performanceRating ?? undefined) as 'green' | 'yellow' | 'red' | undefined,
+      lfOrders: s.lfOrders ?? 0,
+      lfLines: s.lfLines ?? 0,
+      lfMinutes: s.lfMinutes ?? undefined,
+      lfAvgMinsPerOrder: s.lfAvgMinsPerOrder ?? undefined,
+      lfPctOfShift: s.lfPctOfShift ?? undefined,
+      isLFSpecialist: s.isLfSpecialist ?? false,
     }));
 
     let statsArr = [...apiMapped, ...liveFiltered, ...localStats];

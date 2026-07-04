@@ -47,6 +47,7 @@ XLSX-upload warehouse picker analytics dashboard. Frontend-only React+Vite app w
 - `GET /api/dashboard/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — public, returns all stored picker-day stats
 - `POST /api/dashboard/upload` — password-protected (`x-upload-password` header), inserts DayStats rows
 - `GET /api/dashboard/uploads` — public, returns upload history
+- `GET /api/dashboard/live-data` — proxies the external Render feed AND auto-archives every pull into `dashboard_stats` (upsert on picker+date, throttled to once per 10 min). The Render feed is a rolling ~1000-record window, so this archive is the only durable copy of older days.
 
 **DB tables** (`lib/db/src/schema/dashboard.ts`):
 - `dashboard_stats` — one row per picker per date; UNIQUE on `(picker_name, date_str)`
