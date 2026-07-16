@@ -42,6 +42,10 @@ export const dashboardStatsTable = pgTable('dashboard_stats', {
   lfAvgMinsPerOrder: real('lf_avg_mins_per_order'),
   lfPctOfShift: real('lf_pct_of_shift'),
   isLfSpecialist: boolean('is_lf_specialist'),
+  rpOrders: integer('rp_orders'),
+  rpLines: integer('rp_lines'),
+  soOrders: integer('so_orders'),
+  soLines: integer('so_lines'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique('unique_picker_date').on(t.pickerName, t.dateStr),

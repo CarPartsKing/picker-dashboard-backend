@@ -55,6 +55,15 @@ router.post("/dashboard/upload", async (req: Request, res: Response): Promise<vo
       activeWindowMinutes: number | null;
       gapFlags: unknown[];
       performanceRating?: string;
+      firstTimeMins?: number | null;
+      lastTimeMins?: number | null;
+      lfOrders?: number | null;
+      lfLines?: number | null;
+      lfMinutes?: number | null;
+      rpOrders?: number | null;
+      rpLines?: number | null;
+      soOrders?: number | null;
+      soLines?: number | null;
     }>;
   };
 
@@ -78,6 +87,15 @@ router.post("/dashboard/upload", async (req: Request, res: Response): Promise<vo
     activeWindowMinutes: s.activeWindowMinutes ?? null,
     gapFlags: z.array(GapFlagSchema).default([]).parse(s.gapFlags ?? []),
     performanceRating: s.performanceRating ?? null,
+    firstTimeMins: s.firstTimeMins ?? null,
+    lastTimeMins: s.lastTimeMins ?? null,
+    lfOrders: s.lfOrders ?? null,
+    lfLines: s.lfLines ?? null,
+    lfMinutes: s.lfMinutes ?? null,
+    rpOrders: s.rpOrders ?? null,
+    rpLines: s.rpLines ?? null,
+    soOrders: s.soOrders ?? null,
+    soLines: s.soLines ?? null,
   }));
 
   const inserted = await db
@@ -172,6 +190,10 @@ const LiveRecordSchema = z.object({
   lf_avg_mins_per_order: z.number().nullish(),
   lf_pct_of_shift: z.number().nullish(),
   is_lf_specialist: z.boolean().nullish(),
+  rp_orders: z.number().nullish(),
+  rp_lines: z.number().nullish(),
+  so_orders: z.number().nullish(),
+  so_lines: z.number().nullish(),
 });
 
 const LiveResponseSchema = z.object({
@@ -266,6 +288,10 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
       lfAvgMinsPerOrder: r.lf_avg_mins_per_order ?? null,
       lfPctOfShift: r.lf_pct_of_shift ?? null,
       isLfSpecialist: r.is_lf_specialist ?? null,
+      rpOrders: r.rp_orders ?? null,
+      rpLines: r.rp_lines ?? null,
+      soOrders: r.so_orders ?? null,
+      soLines: r.so_lines ?? null,
     };
   });
 
@@ -295,6 +321,10 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
           lfAvgMinsPerOrder: sql`excluded.lf_avg_mins_per_order`,
           lfPctOfShift: sql`excluded.lf_pct_of_shift`,
           isLfSpecialist: sql`excluded.is_lf_specialist`,
+          rpOrders: sql`excluded.rp_orders`,
+          rpLines: sql`excluded.rp_lines`,
+          soOrders: sql`excluded.so_orders`,
+          soLines: sql`excluded.so_lines`,
         },
       });
   }

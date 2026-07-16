@@ -13,3 +13,7 @@ The dashboard's live data comes from a user-controlled external backend (picker-
 - Name duplicates come from the sheet: Ossie vs 0ssie (digit zero), Taurean/Taureen, Will/William, Andy/Andy!, etc. Our normalizeName does Title Case but doesn't strip punctuation.
 
 **How to apply:** when data looks wrong, first check whether it's a feed-side bug (audit via `curl localhost:80/api/dashboard/live-data`) before touching dashboard code.
+
+**Designators:** Sheet time cells can carry designators instead of times: LF (look-for, time subtracted from L/Hr denominator), RP and SO (recognized and counted, but time NOT subtracted — no policy set). As of Jul 2026 the feed exposes rp_/so_ fields but all values are zero.
+
+**Canonical L/Hr formula (all sources):** lines ÷ max((last − first) − lfMinutes, 1) × 60. The feed's own lines_per_hr uses the raw window — never trust it; recompute. Weekly day-of-week team rate is hours-weighted (total lines ÷ total effective hours), not an average of daily averages.

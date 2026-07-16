@@ -9,6 +9,8 @@ export interface Order {
   linesPicked: number;
   timeMinutes: number | null;
   isLookFor?: boolean;
+  isRP?: boolean; // "RP" designator in the time cell (repack / replenishment)
+  isSO?: boolean; // "SO" designator in the time cell (special order)
 }
 
 export interface PickerDayRaw {
@@ -150,12 +152,21 @@ export function parseSheet(
       }
       if (typeof orderCell === 'number' && orderCell <= 0) continue;
       const isLookFor = typeof timeCell === 'string' && /^\s*(L\.?F\.?\s*\d*|look\s+for)\s*$/i.test(timeCell);
-      const timeMinutes = isLookFor ? null : parseTime(timeCell);
+      const isRP = !isLookFor && typeof timeCell === 'string' && /^\s*R\.?P\.?\s*\d*\s*$/i.test(timeCell);
+      const isSO = !isLookFor && !isRP && typeof timeCell === 'string' && /^\s*S\.?O\.?\s*\d*\s*$/i.test(timeCell);
+      const timeMinutes = isLookFor || isRP || isSO ? null : parseTime(timeCell);
       const lines = typeof linesCell === 'number'
         ? Math.round(linesCell)
         : parseInt(String(linesCell ?? '0'), 10) || 0;
       if (lines <= 0) continue;
-      orders.push({ orderNumber: String(orderCell).trim(), linesPicked: lines, timeMinutes, ...(isLookFor ? { isLookFor: true } : {}) });
+      orders.push({
+        orderNumber: String(orderCell).trim(),
+        linesPicked: lines,
+        timeMinutes,
+        ...(isLookFor ? { isLookFor: true } : {}),
+        ...(isRP ? { isRP: true } : {}),
+        ...(isSO ? { isSO: true } : {}),
+      });
     }
     if (orders.length > 0) {
       const normalName = normalizeName(name);

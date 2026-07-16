@@ -27,6 +27,10 @@ export interface ApiDayStat {
   lfAvgMinsPerOrder: number | null;
   lfPctOfShift: number | null;
   isLfSpecialist: boolean | null;
+  rpOrders: number | null;
+  rpLines: number | null;
+  soOrders: number | null;
+  soLines: number | null;
   createdAt: string;
 }
 
@@ -55,6 +59,15 @@ export interface UploadPayload {
     activeWindowMinutes: number | null;
     gapFlags: unknown[];
     performanceRating?: string;
+    firstTimeMins?: number | null;
+    lastTimeMins?: number | null;
+    lfOrders?: number | null;
+    lfLines?: number | null;
+    lfMinutes?: number | null;
+    rpOrders?: number | null;
+    rpLines?: number | null;
+    soOrders?: number | null;
+    soLines?: number | null;
   }>;
 }
 
@@ -132,6 +145,10 @@ export interface LivePickerRecord {
   lf_avg_mins_per_order: number | null;
   lf_pct_of_shift: number | null;
   is_lf_specialist: boolean;
+  rp_orders?: number | null;
+  rp_lines?: number | null;
+  so_orders?: number | null;
+  so_lines?: number | null;
 }
 
 export interface LivePickerResponse {

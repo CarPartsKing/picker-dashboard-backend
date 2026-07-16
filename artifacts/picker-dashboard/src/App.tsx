@@ -81,6 +81,10 @@ interface DayStats {
   lfAvgMinsPerOrder?: number;
   lfPctOfShift?: number;
   isLFSpecialist?: boolean;
+  rpOrders?: number;
+  rpLines?: number;
+  soOrders?: number;
+  soLines?: number;
 }
 interface GapFlag {
   pickerName: string;
@@ -155,6 +159,10 @@ function computeDayStats(data: PickerDayData): DayStats {
 
   const lfOrders = orders.filter(o => o.isLookFor).length;
   const lfLines  = orders.filter(o => o.isLookFor).reduce((s, o) => s + o.linesPicked, 0);
+  const rpOrders = orders.filter(o => o.isRP).length;
+  const rpLines  = orders.filter(o => o.isRP).reduce((s, o) => s + o.linesPicked, 0);
+  const soOrders = orders.filter(o => o.isSO).length;
+  const soLines  = orders.filter(o => o.isSO).reduce((s, o) => s + o.linesPicked, 0);
 
   // Build LF-covered intervals by walking orders in original sheet order.
   // An LF order between two timed orders means the picker was actively working
@@ -210,7 +218,7 @@ function computeDayStats(data: PickerDayData): DayStats {
       }
     }
   }
-  return { pickerName, dateStr, date, totalOrders, totalLines, linesPerHour, ordersPerHour, avgLinesPerOrder, activeWindowMinutes, firstTime, lastTime, gapFlags, lfOrders, lfLines, lfMinutes: lfWindowMinutes > 0 ? lfWindowMinutes : undefined };
+  return { pickerName, dateStr, date, totalOrders, totalLines, linesPerHour, ordersPerHour, avgLinesPerOrder, activeWindowMinutes, firstTime, lastTime, gapFlags, lfOrders, lfLines, lfMinutes: lfWindowMinutes > 0 ? lfWindowMinutes : undefined, rpOrders, rpLines, soOrders, soLines };
 }
 
 function assignRatings(statsByDate: Map<string, DayStats[]>) {
@@ -1537,8 +1545,13 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
   }
   const dowData = DOW_ORDER.filter(d => dowMap.has(d)).map(d => {
     const items = dowMap.get(d)!;
-    const lphItems = items.filter(x => x.linesPerHour != null);
-    const avgLph = lphItems.length ? lphItems.reduce((s, x) => s + x.linesPerHour!, 0) / lphItems.length : 0;
+    // Hours-weighted team rate: total lines ÷ total effective picking hours.
+    // A helper who worked 1 hour counts 1 hour — a plain average of daily
+    // rates would let short outlier days distort the day-of-week picture.
+    const lphItems = items.filter(x => x.linesPerHour != null && x.activeWindowMinutes != null && x.activeWindowMinutes > 0);
+    const effMins = lphItems.reduce((s, x) => s + Math.max(x.activeWindowMinutes! - (x.lfMinutes ?? 0), 1), 0);
+    const linesSum = lphItems.reduce((s, x) => s + x.totalLines, 0);
+    const avgLph = effMins > 0 ? (linesSum / effMins) * 60 : 0;
     const totalLinesSum = items.reduce((s, x) => s + x.totalLines, 0);
     const uniqueDates = new Set(items.map(x => x.dateStr)).size;
     const avgTeamLines = uniqueDates > 0 ? Math.round(totalLinesSum / uniqueDates) : 0;
@@ -1649,7 +1662,7 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
         <div style={{ ...section }}>
           <div style={secTitle}>Day of Week Patterns</div>
           <div style={{ fontSize: 12, color: DIM, marginBottom: 12 }}>
-            Average team L/Hr and lines by day of week — steady differences may point to staffing or volume patterns.
+            Team L/Hr by day of week, weighted by hours worked (total lines ÷ total picking hours) — a short helper day counts only for the hours actually worked. Steady differences may point to staffing or volume patterns.
           </div>
 
           {/* callout pills */}
@@ -2966,6 +2979,10 @@ export default function App() {
       lfAvgMinsPerOrder: r.lf_avg_mins_per_order ?? undefined,
       lfPctOfShift:      r.lf_pct_of_shift      ?? undefined,
       isLFSpecialist:    r.is_lf_specialist     ?? false,
+      rpOrders:          r.rp_orders            ?? 0,
+      rpLines:           r.rp_lines             ?? 0,
+      soOrders:          r.so_orders            ?? 0,
+      soLines:           r.so_lines             ?? 0,
     };
   }, []);
 
@@ -3023,6 +3040,15 @@ export default function App() {
           activeWindowMinutes: s.activeWindowMinutes,
           gapFlags: s.gapFlags,
           performanceRating: s.performanceRating,
+          firstTimeMins: s.firstTime,
+          lastTimeMins: s.lastTime,
+          lfOrders: s.lfOrders ?? null,
+          lfLines: s.lfLines ?? null,
+          lfMinutes: s.lfMinutes ?? null,
+          rpOrders: s.rpOrders ?? null,
+          rpLines: s.rpLines ?? null,
+          soOrders: s.soOrders ?? null,
+          soLines: s.soLines ?? null,
         })),
       };
       const result = await uploadStats(payload, uploadPassword);
@@ -3205,6 +3231,10 @@ export default function App() {
       lfAvgMinsPerOrder: s.lfAvgMinsPerOrder ?? undefined,
       lfPctOfShift: s.lfPctOfShift ?? undefined,
       isLFSpecialist: s.isLfSpecialist ?? false,
+      rpOrders: s.rpOrders ?? 0,
+      rpLines: s.rpLines ?? 0,
+      soOrders: s.soOrders ?? 0,
+      soLines: s.soLines ?? 0,
     }));
 
     let statsArr = [...apiMapped, ...liveFiltered, ...localStats];
