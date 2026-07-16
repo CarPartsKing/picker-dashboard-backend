@@ -2910,6 +2910,33 @@ export default function App() {
   // ── Convert LivePickerRecord → DayStats ───────────────────────────────────────
   const liveRecordToDayStats = useCallback((r: LivePickerRecord): DayStats => {
     const normalPicker = normalizeName(r.picker);
+    // Canonical rate formula — identical to computeDayStats for XLSX files:
+    // rate = count / max((last - first) - lfMinutes, 1) * 60.
+    // The Render feed's lines_per_hr does NOT subtract Look-For time, so we
+    // recompute locally to keep every data source on the same formula.
+    // Round minutes exactly like the server archive does, so the live view
+    // and archived DB rows always agree to the decimal.
+    const first = r.first_time_mins != null ? Math.round(r.first_time_mins) : null;
+    const last = r.last_time_mins != null ? Math.round(r.last_time_mins) : null;
+    const timingMissing = first == null || last == null;
+    const windowMins = !timingMissing && last > first ? last - first : null;
+    const effectiveMins = windowMins != null ? Math.max(windowMins - (r.lf_minutes ?? 0), 1) : null;
+    const linesPerHour =
+      effectiveMins != null
+        ? r.total_lines != null
+          ? (r.total_lines / effectiveMins) * 60
+          : null
+        : timingMissing
+          ? r.lines_per_hr
+          : null;
+    const ordersPerHour =
+      effectiveMins != null
+        ? r.orders != null
+          ? (r.orders / effectiveMins) * 60
+          : null
+        : timingMissing
+          ? r.orders_per_hr
+          : null;
     const gapFlags: GapFlag[] = (r.gaps ?? [])
       .filter(g => g.gapMins >= 60)
       .map(g => ({
@@ -2926,12 +2953,12 @@ export default function App() {
       date: new Date(r.date + 'T12:00:00'),
       totalOrders: r.orders,
       totalLines: r.total_lines,
-      linesPerHour: r.lines_per_hr,
-      ordersPerHour: r.orders_per_hr,
+      linesPerHour,
+      ordersPerHour,
       avgLinesPerOrder: r.avg_lines_per_order ?? 0,
-      activeWindowMinutes: r.active_hrs != null ? r.active_hrs * 60 : null,
-      firstTime: r.first_time_mins,
-      lastTime: r.last_time_mins,
+      activeWindowMinutes: windowMins ?? (r.active_hrs != null ? r.active_hrs * 60 : null),
+      firstTime: first,
+      lastTime: last,
       gapFlags,
       lfOrders:          r.lf_orders            ?? 0,
       lfLines:           r.lf_lines             ?? 0,

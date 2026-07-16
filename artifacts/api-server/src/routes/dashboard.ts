@@ -210,6 +210,34 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
 
   const rows = [...byKey.values()].map((r) => {
     const pickerName = normalizeName(r.picker);
+    // Canonical rate formula (matches the dashboard's XLSX parser):
+    // rate = count / max((last - first) - lfMinutes, 1) * 60.
+    // The upstream feed does NOT subtract Look-For time, so we recompute
+    // here instead of trusting its lines_per_hr / orders_per_hr.
+    const first = r.first_time_mins != null ? Math.round(r.first_time_mins) : null;
+    const last = r.last_time_mins != null ? Math.round(r.last_time_mins) : null;
+    // Timing present but invalid (last <= first) → null rates, matching the
+    // XLSX parser which produces null when there's no usable window. Only
+    // fall back to upstream rates when timing is entirely absent.
+    const timingMissing = first == null || last == null;
+    const windowMins = !timingMissing && last > first ? last - first : null;
+    const effectiveMins = windowMins != null ? Math.max(windowMins - (r.lf_minutes ?? 0), 1) : null;
+    const linesPerHour =
+      effectiveMins != null
+        ? r.total_lines != null
+          ? (r.total_lines / effectiveMins) * 60
+          : null
+        : timingMissing
+          ? (r.lines_per_hr ?? null)
+          : null;
+    const ordersPerHour =
+      effectiveMins != null
+        ? r.orders != null
+          ? (r.orders / effectiveMins) * 60
+          : null
+        : timingMissing
+          ? (r.orders_per_hr ?? null)
+          : null;
     const gapFlags = (r.gaps ?? [])
       .filter((g) => g.gapMins >= 60)
       .map((g) => ({
@@ -225,13 +253,13 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
       dateStr: r.date,
       totalLines: r.total_lines ?? 0,
       totalOrders: r.orders ?? 0,
-      linesPerHour: r.lines_per_hr ?? null,
-      ordersPerHour: r.orders_per_hr ?? null,
+      linesPerHour,
+      ordersPerHour,
       avgLinesPerOrder: r.avg_lines_per_order ?? null,
-      activeWindowMinutes: r.active_hrs != null ? r.active_hrs * 60 : null,
+      activeWindowMinutes: windowMins ?? (r.active_hrs != null ? r.active_hrs * 60 : null),
       gapFlags,
-      firstTimeMins: r.first_time_mins != null ? Math.round(r.first_time_mins) : null,
-      lastTimeMins: r.last_time_mins != null ? Math.round(r.last_time_mins) : null,
+      firstTimeMins: first,
+      lastTimeMins: last,
       lfOrders: r.lf_orders ?? null,
       lfLines: r.lf_lines ?? null,
       lfMinutes: r.lf_minutes ?? null,
