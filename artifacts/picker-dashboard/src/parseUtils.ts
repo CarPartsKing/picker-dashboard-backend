@@ -76,18 +76,43 @@ export function parseTime(val: unknown): number | null {
   if (val === null || val === undefined || val === '') return null;
   if (typeof val === 'number') {
     if (val > 0 && val < 1) return Math.round(val * 24 * 60);
-    const v = Math.floor(Math.abs(val));
+    if (Number.isInteger(val) && val >= 1 && val <= 23) return val * 60;
+    if (val >= 1 && val < 24 && !Number.isInteger(val)) {
+      const h = Math.floor(val);
+      const m = Math.round((val - h) * 100);
+      if (m < 60) return h * 60 + m;
+    }
+    const v = Math.round(Math.abs(val));
     if (v >= 0 && v <= 2359) {
       const h = Math.floor(v / 100), m = v % 100;
       if (h <= 23 && m <= 59) return h * 60 + m;
     }
+    const digits = String(v);
+    if (digits.length === 4 && digits.endsWith('0')) {
+      const corrected = parseInt(digits.slice(0, -1), 10);
+      const h = Math.floor(corrected / 100), m = corrected % 100;
+      if (h <= 23 && m <= 59) return h * 60 + m;
+    }
     return null;
   }
-  const str = String(val).trim();
+  const str = String(val)
+    .trim()
+    .replace(/^[`\\]+/, '')
+    .replace(/[',]/g, '')
+    .replace(/[.,]+$/, '');
   if (!str) return null;
   const isPm = /pm/i.test(str);
   const isAm = /am/i.test(str);
-  const sep = str.includes(';') ? ';' : str.includes(':') ? ':' : null;
+  const hourOnly = str.match(/^(\d{1,2})\s*(a\.?m\.?|p\.?m\.?)?$/i);
+  if (hourOnly) {
+    let h = Number(hourOnly[1]);
+    const suffix = hourOnly[2] ?? '';
+    if (h < 0 || h > (suffix ? 12 : 23)) return null;
+    if (/p/i.test(suffix) && h !== 12) h += 12;
+    if (/a/i.test(suffix) && h === 12) h = 0;
+    return h * 60;
+  }
+  const sep = str.includes(';') ? ';' : str.includes(':') ? ':' : str.includes('.') ? '.' : null;
   if (sep) {
     const [hs, ms] = str.split(sep);
     let h = parseInt(hs, 10);
@@ -151,10 +176,14 @@ export function parseSheet(
         if (!t || SKIP_RE.test(t)) continue;
       }
       if (typeof orderCell === 'number' && orderCell <= 0) continue;
-      const isLookFor = typeof timeCell === 'string' && /^\s*(L\.?F\.?\s*\d*|look\s+for)\s*$/i.test(timeCell);
-      const isRP = !isLookFor && typeof timeCell === 'string' && /^\s*R\.?P\.?\s*\d*\s*$/i.test(timeCell);
-      const isSO = !isLookFor && !isRP && typeof timeCell === 'string' && /^\s*S\.?O\.?\s*\d*\s*$/i.test(timeCell);
-      const timeMinutes = isLookFor || isRP || isSO ? null : parseTime(timeCell);
+      const timeText = typeof timeCell === 'string' ? timeCell.trim() : '';
+      const isLookFor = /^(?:L\.?F\.?|look\s+for)/i.test(timeText);
+      const isRP = !isLookFor && /^R\.?P\.?/i.test(timeText);
+      const isSO = !isLookFor && !isRP && /^S\.?O\.?/i.test(timeText);
+      const activityTime = isLookFor || isRP || isSO
+        ? timeText.replace(/^(?:L\.?F\.?|R\.?P\.?|S\.?O\.?|look\s+for)\s*/i, '')
+        : timeCell;
+      const timeMinutes = parseTime(activityTime);
       const lines = typeof linesCell === 'number'
         ? Math.round(linesCell)
         : parseInt(String(linesCell ?? '0'), 10) || 0;

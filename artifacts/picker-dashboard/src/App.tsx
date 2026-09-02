@@ -149,8 +149,9 @@ function removePhantomTimes(times: number[]): number[] {
 
 function computeDayStats(data: PickerDayData): DayStats {
   const { pickerName, dateStr, date, orders } = data;
-  const totalOrders = orders.length;
-  const totalLines  = orders.reduce((s, o) => s + o.linesPicked, 0);
+  const pickingOrders = orders.filter(o => !o.isLookFor && !o.isRP && !o.isSO);
+  const totalOrders = pickingOrders.length;
+  const totalLines  = pickingOrders.reduce((s, o) => s + o.linesPicked, 0);
   // timeMinutes values are already parsed integers (minutes since midnight).
   // Sort numerically — NOT lexicographically — so "1:30" (90) never precedes
   // "12:30" (750) and gap spans are always computed in chronological order.
@@ -173,14 +174,20 @@ function computeDayStats(data: PickerDayData): DayStats {
   let lfTrackLast: number | null = null;
   let inLfZone = false;
   for (const order of orders) {
-    if (order.timeMinutes !== null) {
-      if (inLfZone && lfTrackLast !== null) {
-        lfIntervals.push([lfTrackLast, order.timeMinutes]);
-        inLfZone = false;
+    if (order.isLookFor) {
+      if (!inLfZone) {
+        inLfZone = true;
+        if (order.timeMinutes !== null) lfTrackLast = order.timeMinutes;
       }
+      continue;
+    }
+    const isOrdinaryPick = !order.isRP && !order.isSO;
+    if (isOrdinaryPick && order.timeMinutes !== null) {
+      if (inLfZone && lfTrackLast !== null && order.timeMinutes > lfTrackLast) {
+        lfIntervals.push([lfTrackLast, order.timeMinutes]);
+      }
+      inLfZone = false;
       lfTrackLast = order.timeMinutes;
-    } else if (order.isLookFor) {
-      inLfZone = true;
     }
   }
   const lfWindowMinutes = lfIntervals.reduce((s, [from, to]) => s + (to - from), 0);
@@ -221,11 +228,24 @@ function computeDayStats(data: PickerDayData): DayStats {
   return { pickerName, dateStr, date, totalOrders, totalLines, linesPerHour, ordersPerHour, avgLinesPerOrder, activeWindowMinutes, firstTime, lastTime, gapFlags, lfOrders, lfLines, lfMinutes: lfWindowMinutes > 0 ? lfWindowMinutes : undefined, rpOrders, rpLines, soOrders, soLines };
 }
 
+function weightedLinesPerHour(stats: DayStats[]): number {
+  let totalLines = 0;
+  let totalEffectiveMinutes = 0;
+  for (const stat of stats) {
+    if (stat.linesPerHour == null || stat.linesPerHour <= 0 || stat.totalLines <= 0) continue;
+    const effectiveMinutes = (stat.totalLines / stat.linesPerHour) * 60;
+    if (!Number.isFinite(effectiveMinutes) || effectiveMinutes <= 0) continue;
+    totalLines += stat.totalLines;
+    totalEffectiveMinutes += effectiveMinutes;
+  }
+  return totalEffectiveMinutes > 0 ? (totalLines / totalEffectiveMinutes) * 60 : 0;
+}
+
 function assignRatings(statsByDate: Map<string, DayStats[]>) {
   for (const stats of statsByDate.values()) {
     const lphs = stats.map(s => s.linesPerHour).filter((v): v is number => v !== null);
     if (!lphs.length) continue;
-    const avg = lphs.reduce((a, b) => a + b, 0) / lphs.length;
+    const avg = weightedLinesPerHour(stats);
     for (const s of stats) {
       if (s.linesPerHour === null) { s.performanceRating = 'yellow'; continue; }
       const pct = ((s.linesPerHour - avg) / avg) * 100;
@@ -289,11 +309,9 @@ function computePickerScore(
   const lphDays  = days.filter(d => d.linesPerHour != null);
 
   // 1. Pick Rate (max 35 pts) ─────────────────────────────────────────────────
-  const pickerAvgLph = lphDays.length
-    ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+  const pickerAvgLph = weightedLinesPerHour(lphDays);
   const teamLphs     = allStats.filter(s => s.linesPerHour != null);
-  const teamAvgLph   = teamLphs.length
-    ? teamLphs.reduce((s, d) => s + d.linesPerHour!, 0) / teamLphs.length : 0;
+  const teamAvgLph   = weightedLinesPerHour(teamLphs);
   const ratio        = teamAvgLph > 0 ? pickerAvgLph / teamAvgLph : 0;
   // 100 % of team ≈ 21 pts; 120 %+ → 30 pts; scales linearly; floor 4
   const pickRatePts  = Math.round(Math.max(SCORE_PICK_RATE_FLOOR, Math.min(SCORE_PICK_RATE_MAX, ratio * SCORE_PICK_RATE_SCALE)));
@@ -347,8 +365,8 @@ function computePickerScore(
   let trendLabel = 'Flat';
   const calcPct  = (early: typeof sorted, late: typeof sorted) => {
     if (!early.length || !late.length) return null;
-    const ea = early.reduce((s, d) => s + d.linesPerHour!, 0) / early.length;
-    const la = late.reduce((s, d)  => s + d.linesPerHour!, 0) / late.length;
+    const ea = weightedLinesPerHour(early);
+    const la = weightedLinesPerHour(late);
     return ea > 0 ? ((la - ea) / ea) * 100 : 0;
   };
   const applyPct = (pct: number) => {
@@ -785,7 +803,7 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
       .map(p => {
         const days = allStats.filter(s => s.pickerName === p);
         const lphDays = days.filter(s => s.linesPerHour !== null);
-        const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+        const avgLph = weightedLinesPerHour(lphDays);
         return { name: p, score: computePickerScore(p, allStats, allGapFlags, pickerData), avgLph };
       })
       .sort((a, b) => b.score.total - a.score.total),
@@ -793,9 +811,8 @@ function ScoreTab({ allStats, allGapFlags, pickerNames, pickerData }: {
   );
 
   const teamBenchmarkLph = useMemo(() => {
-    const valid = scores.filter(s => s.avgLph > 0);
-    return valid.length ? valid.reduce((s, p) => s + p.avgLph, 0) / valid.length : 0;
-  }, [scores]);
+    return weightedLinesPerHour(allStats);
+  }, [allStats]);
 
   const selScore = useMemo(() =>
     computePickerScore(sel, allStats, allGapFlags, pickerData),
@@ -1223,7 +1240,7 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
   const todayLines = todayStats.reduce((s, d) => s + d.totalLines, 0);
   const todayOrders = todayStats.reduce((s, d) => s + d.totalOrders, 0);
   const todayLphArr = todayStats.filter(s => s.linesPerHour !== null);
-  const todayAvgLph = todayLphArr.length ? todayLphArr.reduce((s, d) => s + d.linesPerHour!, 0) / todayLphArr.length : 0;
+  const todayAvgLph = weightedLinesPerHour(todayLphArr);
   const totalLinesAll = allStats.reduce((s, d) => s + d.totalLines, 0);
   const totalOrdersAll = allStats.reduce((s, d) => s + d.totalOrders, 0);
 
@@ -1241,7 +1258,7 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
   const leaderboard = useMemo(() => pickerNames.map((name, i) => {
     const days = allStats.filter(s => s.pickerName === name);
     const lphDays = days.filter(s => s.linesPerHour !== null);
-    const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+    const avgLph = weightedLinesPerHour(lphDays);
     const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
     const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
     const isLFSpecialist = days.some(d => d.isLFSpecialist === true);
@@ -1249,9 +1266,8 @@ function OverviewTab({ allStats, allDates, pickerNames, allGapFlags, pickerData 
   }).sort((a, b) => b.avgLph - a.avgLph), [allStats, pickerNames]);
 
   const teamBenchmark = useMemo(() => {
-    const valid = leaderboard.filter(p => p.avgLph > 0);
-    return valid.length ? valid.reduce((s, p) => s + p.avgLph, 0) / valid.length : 0;
-  }, [leaderboard]);
+    return weightedLinesPerHour(allStats);
+  }, [allStats]);
 
   const chartData = useMemo(() => allDates.map(ds => {
     const byDate = allStats.filter(s => s.dateStr === ds);
@@ -1741,11 +1757,11 @@ function WeeklyTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerName
 
         const matrix = pickerNames.map(name => {
           const ps = allStats.filter(s => s.pickerName === name && s.linesPerHour != null);
-          const overall = ps.length ? ps.reduce((s, d) => s + d.linesPerHour!, 0) / ps.length : 0;
+          const overall = weightedLinesPerHour(ps);
           const dowAvgs = new Map<number, { avg: number; count: number }>();
           for (const dow of activeDows) {
             const ds = ps.filter(s => new Date(s.dateStr + 'T12:00:00').getDay() === dow);
-            if (ds.length) dowAvgs.set(dow, { avg: ds.reduce((s, d) => s + d.linesPerHour!, 0) / ds.length, count: ds.length });
+            if (ds.length) dowAvgs.set(dow, { avg: weightedLinesPerHour(ds), count: ds.length });
           }
           const entries = [...dowAvgs.entries()];
           const best  = entries.length ? entries.reduce((a, b) => b[1].avg > a[1].avg ? b : a)[0] : null;
@@ -1824,7 +1840,7 @@ function CompareTab({ allStats, pickerNames }: { allStats: DayStats[]; pickerNam
     const ophDays = days.filter(s => s.ordersPerHour != null);
     const totalLines = days.reduce((s, d) => s + d.totalLines, 0);
     const totalOrders = days.reduce((s, d) => s + d.totalOrders, 0);
-    const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+    const avgLph = weightedLinesPerHour(lphDays);
     const avgOph = ophDays.length ? ophDays.reduce((s, d) => s + d.ordersPerHour!, 0) / ophDays.length : 0;
     const avgLpo = totalOrders > 0 ? totalLines / totalOrders : 0;
     return { totalLines, totalOrders, avgLph, avgOph, avgLpo, daysWorked: days.length };
@@ -1939,7 +1955,7 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
 
   const teamAvgLph = useMemo(() => {
     const lphs = allStats.filter(s => s.linesPerHour != null);
-    return lphs.length ? lphs.reduce((s, d) => s + d.linesPerHour!, 0) / lphs.length : 0;
+    return weightedLinesPerHour(lphs);
   }, [allStats]);
 
   const teamAvgLpo = useMemo(() => {
@@ -1965,7 +1981,7 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   const lfPctOfShiftVal = totalActiveWindowMins > 0 && totalLfMinutes > 0
     ? ((totalLfMinutes / totalActiveWindowMins) * 100).toFixed(1) : null;
   const lphDays = days.filter(s => s.linesPerHour != null);
-  const avgLph = lphDays.length ? lphDays.reduce((s, d) => s + d.linesPerHour!, 0) / lphDays.length : 0;
+  const avgLph = weightedLinesPerHour(lphDays);
   const avgLpo = totalOrders > 0 ? totalLines / totalOrders : 0;
   const vsTeam  = teamAvgLph > 0 ? ((avgLph  - teamAvgLph)  / teamAvgLph)  * 100 : 0;
   const vsTeamLpo = teamAvgLpo > 0 ? ((avgLpo - teamAvgLpo) / teamAvgLpo) * 100 : 0;
@@ -1978,8 +1994,8 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   const lphSorted = [...lphDays].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
   const last5  = lphSorted.slice(-5);
   const prior5 = lphSorted.slice(-10, -5);
-  const last5Avg  = last5.length  ? last5.reduce((s, d)  => s + d.linesPerHour!, 0) / last5.length  : 0;
-  const prior5Avg = prior5.length ? prior5.reduce((s, d) => s + d.linesPerHour!, 0) / prior5.length : 0;
+  const last5Avg  = weightedLinesPerHour(last5);
+  const prior5Avg = weightedLinesPerHour(prior5);
   let trendValue = '—', trendSub = '', trendColor = DIM;
   if (last5.length >= 2 && prior5.length >= 1) {
     const pct = prior5Avg > 0 ? ((last5Avg - prior5Avg) / prior5Avg) * 100 : 0;
@@ -1990,8 +2006,8 @@ function PickerDetailTab({ allStats, pickerNames, allDates, externalPicker, pick
   } else if (last5.length >= 3) {
     // fewer than 10 total days — split what we have in half
     const half = Math.floor(last5.length / 2);
-    const earlyAvg = last5.slice(0, half).reduce((s, d) => s + d.linesPerHour!, 0) / half;
-    const lateAvg  = last5.slice(half).reduce((s, d) => s + d.linesPerHour!, 0) / (last5.length - half);
+    const earlyAvg = weightedLinesPerHour(last5.slice(0, half));
+    const lateAvg  = weightedLinesPerHour(last5.slice(half));
     const pct = earlyAvg > 0 ? ((lateAvg - earlyAvg) / earlyAvg) * 100 : 0;
     trendSub = 'recent vs early';
     if (pct > 5)       { trendValue = `↑ +${pct.toFixed(0)}%`; trendColor = GREEN; }
@@ -2951,14 +2967,14 @@ export default function App() {
           ? r.orders_per_hr
           : null;
     const gapFlags: GapFlag[] = (r.gaps ?? [])
-      .filter(g => g.gapMins >= 60)
+      .filter(g => g.gapMins >= GAP_FLAG_MIN)
       .map(g => ({
         pickerName: normalPicker,
         dateStr: r.date,
         fromMinutes: g.fromMins,
         toMinutes: g.toMins,
         gapMinutes: g.gapMins,
-        severity: g.gapMins >= 120 ? 'High' : g.gapMins >= 90 ? 'Med' : 'Low',
+        severity: g.gapMins >= GAP_HIGH ? 'High' : g.gapMins >= GAP_MED ? 'Med' : 'Low',
       }));
     return {
       pickerName: normalPicker,

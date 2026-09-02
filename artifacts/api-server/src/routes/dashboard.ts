@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { dashboardStatsTable, dashboardUploadsTable } from "@workspace/db/schema";
-import { desc, gte, lte, and, type SQL } from "drizzle-orm";
+import { desc, gte, lte, and, eq, type SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 const GapFlagSchema = z.object({
@@ -96,12 +96,36 @@ router.post("/dashboard/upload", async (req: Request, res: Response): Promise<vo
     rpLines: s.rpLines ?? null,
     soOrders: s.soOrders ?? null,
     soLines: s.soLines ?? null,
+    source: "upload",
   }));
 
   const inserted = await db
     .insert(dashboardStatsTable)
     .values(rows)
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: [dashboardStatsTable.pickerName, dashboardStatsTable.dateStr],
+      setWhere: eq(dashboardStatsTable.source, "live"),
+      set: {
+        totalLines: sql`excluded.total_lines`,
+        totalOrders: sql`excluded.total_orders`,
+        linesPerHour: sql`excluded.lines_per_hour`,
+        ordersPerHour: sql`excluded.orders_per_hour`,
+        avgLinesPerOrder: sql`excluded.avg_lines_per_order`,
+        activeWindowMinutes: sql`excluded.active_window_minutes`,
+        gapFlags: sql`excluded.gap_flags`,
+        performanceRating: sql`excluded.performance_rating`,
+        firstTimeMins: sql`excluded.first_time_mins`,
+        lastTimeMins: sql`excluded.last_time_mins`,
+        lfOrders: sql`excluded.lf_orders`,
+        lfLines: sql`excluded.lf_lines`,
+        lfMinutes: sql`excluded.lf_minutes`,
+        rpOrders: sql`excluded.rp_orders`,
+        rpLines: sql`excluded.rp_lines`,
+        soOrders: sql`excluded.so_orders`,
+        soLines: sql`excluded.so_lines`,
+        source: sql`excluded.source`,
+      },
+    })
     .returning({ id: dashboardStatsTable.id });
 
   const rowsInserted = inserted.length;
@@ -261,14 +285,14 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
           ? (r.orders_per_hr ?? null)
           : null;
     const gapFlags = (r.gaps ?? [])
-      .filter((g) => g.gapMins >= 60)
+      .filter((g) => g.gapMins >= 90)
       .map((g) => ({
         pickerName,
         dateStr: r.date,
         fromMinutes: g.fromMins,
         toMinutes: g.toMins,
         gapMinutes: g.gapMins,
-        severity: (g.gapMins >= 120 ? "High" : g.gapMins >= 90 ? "Med" : "Low") as "Low" | "Med" | "High",
+        severity: (g.gapMins >= 180 ? "High" : g.gapMins >= 120 ? "Med" : "Low") as "Low" | "Med" | "High",
       }));
     return {
       pickerName,
@@ -292,6 +316,7 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
       rpLines: r.rp_lines ?? null,
       soOrders: r.so_orders ?? null,
       soLines: r.so_lines ?? null,
+      source: "live",
     };
   });
 
@@ -305,6 +330,7 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
       .values(chunk)
       .onConflictDoUpdate({
         target: [dashboardStatsTable.pickerName, dashboardStatsTable.dateStr],
+        setWhere: eq(dashboardStatsTable.source, "live"),
         set: {
           totalLines: sql`excluded.total_lines`,
           totalOrders: sql`excluded.total_orders`,

@@ -46,6 +46,7 @@ export const dashboardStatsTable = pgTable('dashboard_stats', {
   rpLines: integer('rp_lines'),
   soOrders: integer('so_orders'),
   soLines: integer('so_lines'),
+  source: text('source').notNull().default('upload'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique('unique_picker_date').on(t.pickerName, t.dateStr),
