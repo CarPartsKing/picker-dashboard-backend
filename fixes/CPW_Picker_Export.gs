@@ -249,6 +249,7 @@ function isBlankTimeMarker_(raw) {
     value === '"' ||
     value === "'" ||
     value === "\\" ||
+    value === "." ||
     value === "-" ||
     value === "--" ||
     value.toUpperCase() === "N/A"
@@ -278,10 +279,21 @@ function parseTimeMins(raw) {
       if (minutes < 60) return hours * 60 + minutes;
     }
 
-    return parseCompactTime_(String(Math.round(raw)));
+    const compact = String(Math.round(raw));
+    const parsedCompact = parseCompactTime_(compact);
+    if (parsedCompact !== null) return parsedCompact;
+
+    // Common keypad slip: 7560 in a time cell means 7:56.
+    if (compact.length === 4 && compact.endsWith("0")) {
+      return parseCompactTime_(compact.slice(0, -1));
+    }
+    return null;
   }
 
-  const value = cleanTimeString_(raw);
+  const value = cleanTimeString_(raw)
+    .replace(/^[`\\]+/, "")
+    .replace(/'/g, "")
+    .replace(/[.,]+$/, "");
 
   // Hour only, optionally with AM/PM: 1, 10, 5 PM.
   let match = value.match(/^(\d{1,2})\s*(a\.?m\.?|p\.?m\.?)?$/i);
@@ -336,16 +348,21 @@ function getActivityType(timeValue) {
     return "pick";
   }
   const value = cleanTimeString_(timeValue).toUpperCase();
-  if (/^LF\b/.test(value)) return "lf";
-  if (/^RP\b/.test(value)) return "rp";
-  if (/^SO\b/.test(value)) return "so";
+  if (value.startsWith("LF")) return "lf";
+  if (value.startsWith("RP")) return "rp";
+  if (value.startsWith("SO")) return "so";
   return "pick";
 }
 
 function isKnownNonTimeValue_(value) {
   if (isBlankTimeMarker_(value)) return true;
   const upper = cleanTimeString_(value).toUpperCase();
-  return /^(LF|RP|SO)\b/.test(upper) || upper === "PW";
+  return (
+    upper.startsWith("LF") ||
+    upper.startsWith("RP") ||
+    upper.startsWith("SO") ||
+    upper === "PW"
+  );
 }
 
 function isValidOrder(orderValue) {

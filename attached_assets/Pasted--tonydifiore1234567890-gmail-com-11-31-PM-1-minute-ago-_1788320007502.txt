@@ -1,0 +1,211 @@
+
+tonydifiore1234567890@gmail.com
+11:31 PM (1 minute ago)
+to me
+
+The export completed successfully, but 145 time values were ignored.
+
+Records exported: 377
+
+Date: 2026-08-03 | Picker: ANTHONY | Time column: 30 | Value: "LF332" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1142" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1147" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1156" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1205" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1221" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1232" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1247" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1249" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF1257" | 
+Issue: Unrecognized time format
+Date: 2026-08-04 | Picker: ANTHONY | Time column: 39 | Value: "LF109" | 
+Issue: Unrecognized time format
+Date: 2026-08-05 | Picker: ANTHONY | Time column: 36 | Value: "LF1255" | 
+Issue: Unrecognized time format
+Date: 2026-08-06 | Picker: ROBBY | Time column: 9 | Value: "lfkd" | Issue: 
+Unrecognized time format
+Date: 2026-08-08 | Picker: ANTHONY | Time column: 27 | Value: "LF118" | 
+Issue: Unrecognized time format
+Date: 2026-08-08 | Picker: ANTHONY | Time column: 27 | Value: "LF520" | 
+Issue: Unrecognized time format
+Date: 2026-08-08 | Picker: ANTHONY | Time column: 27 | Value: "LF557" | 
+Issue: Unrecognized time format
+Date: 2026-08-08 | Picker: ANTHONY | Time column: 27 | Value: "LF658" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: DAVION | Time column: 15 | Value: "." | Issue: 
+Unrecognized time format
+Date: 2026-08-09 | Picker: CHRIS | Time column: 30 | Value: "." | Issue: 
+Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF210" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF223" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF321" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF349" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF425" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF512" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF521" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF541" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF608" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF649" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF649" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF712" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF754" | 
+Issue: Unrecognized time format
+Date: 2026-08-09 | Picker: ANTHONY | Time column: 36 | Value: "LF754" | 
+Issue: Unrecognized time format
+Date: 2026-08-13 | Picker: DAVION | Time column: 18 | Value: "." | Issue: 
+Unrecognized time format
+Date: 2026-08-11 | Picker: BELLE | Time column: 3 | Value: "9';29" | Issue: 
+Unrecognized time format
+Date: 2026-08-11 | Picker: ANTHONY | Time column: 48 | Value: "LF1203" | 
+Issue: Unrecognized time format
+Date: 2026-08-12 | Picker: ANTHONY | Time column: 51 | Value: "LF1212" | 
+Issue: Unrecognized time format
+Date: 2026-08-15 | Picker: ANTHONY | Time column: 21 | Value: "LF424" | 
+Issue: Unrecognized time format
+Date: 2026-08-15 | Picker: ANTHONY | Time column: 21 | Value: "LF424" | 
+Issue: Unrecognized time format
+Date: 2026-08-15 | Picker: ANTHONY | Time column: 21 | Value: "LF658" | 
+Issue: Unrecognized time format
+Date: 2026-08-15 | Picker: ERIC | Time column: 33 | Value: "`700" | Issue: 
+Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF1157" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF1239" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF1246" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF1258" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF118" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF209" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF217" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF239" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF321" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF513" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF534" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF555" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF600" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF630" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF639" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF721" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: ANTHONY | Time column: 21 | Value: "LF803" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:16" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:17" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:17" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:18" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:18" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:19" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:20" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:20" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:21" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:21" | 
+Issue: Unrecognized time format
+Date: 2026-08-16 | Picker: Nasir | Time column: 27 | Value: "LF12:21" | 
+Issue: Unrecognized time format
+Date: 2026-08-17 | Picker: BELLE | Time column: 3 | Value: "1'35" | Issue: 
+Unrecognized time format
+Date: 2026-08-17 | Picker: ANTHONYD | Time column: 27 | Value: "LF251" | 
+Issue: Unrecognized time format
+Date: 2026-08-17 | Picker: ANTHONYD | Time column: 27 | Value: "LF402" | 
+Issue: Unrecognized time format
+Date: 2026-08-17 | Picker: ANTHONYD | Time column: 27 | Value: "LF430" | 
+Issue: Unrecognized time format
+Date: 2026-08-17 | Picker: ANTHONYD | Time column: 27 | Value: "LF537" | 
+Issue: Unrecognized time format
+Date: 2026-08-17 | Picker: ANTHONYD | Time column: 27 | Value: "LF615" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: BELLE | Time column: 3 | Value: "1;'06" | Issue: 
+Unrecognized time format
+Date: 2026-08-18 | Picker: JHAI | Time column: 36 | Value: "\\11553" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF1140" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF435" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF601" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF608" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF624" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF704" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF715" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF730" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "LF746" | 
+Issue: Unrecognized time format
+Date: 2026-08-18 | Picker: ANTHONY | Time column: 39 | Value: "." | Issue: 
+Unrecognized time format
+Date: 2026-08-19 | Picker: Nasir | Time column: 36 | Value: "LF2:43" | 
+Issue: Unrecognized time format
+Date: 2026-08-19 | Picker: Nasir | Time column: 36 | Value: "LF2:44" | 
+Issue: Unrecognized time format
+Date: 2026-08-19 | Picker: Nasir | Time column: 36 | Value: "LF2:44" | 
+Issue: Unrecognized time format
+Date: 2026-08-20 | Picker: BELLE | Time column: 3 | Value: "10';50" | 
+Issue: Unrecognized time format
+Date: 2026-08-20 | Picker: OSSIE | Time column: 15 | Value: 7560 | Issue: 
+Unrecognized time format
+Date: 2026-08-21 | Picker: JAY | Time column: 33 | Value: "11;25." | Issue: 
+Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF1209" | 
+Issue: Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF1241" | 
+Issue: Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF118" | 
+Issue: Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF145" | 
+Issue: Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF234" | 
+Issue: Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF315" | 
+Issue: Unrecognized time format
+Date: 2026-08-23 | Picker: ANTHONY | Time column: 33 | Value: "LF345" | 
+Issue: Unrecognized time format
+
+45 additional warnings were omitted from this email.
