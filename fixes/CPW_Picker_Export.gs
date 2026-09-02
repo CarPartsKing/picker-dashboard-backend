@@ -4,6 +4,7 @@ const EXPORT_TIME_ZONE = "America/New_York";
 const EXPORT_HOUR = 19;
 const UPLOAD_BATCH_SIZE = 100;
 const MAX_ERROR_DETAILS = 100;
+const SCRIPT_VERSION = "2026-09-02-v3";
 
 /**
  * Optional security:
@@ -64,7 +65,9 @@ function testExport() {
 
 function runExport_() {
   const startedAt = new Date();
-  Logger.log("=== STARTING EXPORT === " + startedAt.toISOString());
+  Logger.log(
+    "=== STARTING EXPORT " + SCRIPT_VERSION + " === " + startedAt.toISOString()
+  );
 
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   if (!spreadsheet) {
@@ -317,7 +320,18 @@ function parseTimeMins(raw) {
     );
   }
 
-  return parseCompactTime_(value);
+  const parsedCompact = parseCompactTime_(value);
+  if (parsedCompact !== null) return parsedCompact;
+
+  // Last safe fallback for punctuation-damaged entries such as 12:,39 or
+  // 10,:31. Only accept three or four digits so genuinely ambiguous values
+  // such as 11553 remain warnings instead of being guessed.
+  const digitsOnly = value.replace(/\D/g, "");
+  if (digitsOnly.length === 3 || digitsOnly.length === 4) {
+    return parseCompactTime_(digitsOnly);
+  }
+
+  return null;
 }
 
 function parseCompactTime_(value) {
