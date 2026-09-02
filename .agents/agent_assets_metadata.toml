@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "HrosWwhYrTeVwtSqB60Lh"
+uri = "file://fixes/CPW_Picker_Export.gs"
+type = "unspecified"
+title = "CPW Picker Export — Replacement Script"
+description = "Complete corrected Google Apps Script with robust time parsing, LF-aware L/Hr, upload retries, chunking, locking, and clearer warnings."
+logical_id = "efb6fa62-9562-485d-8cf7-91e4fba9f752"
+content_hash = "sha256:50376b4684bb5a43072038c94c0ec9f63cdc086049b01e3055ca186f196f5403"
+size = 21890
+mtime_ms = 1788319467256
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:11a30d4a-c629-4d49-b068-65e04862493e/efb6fa62-9562-485d-8cf7-91e4fba9f752/c089a0d3-d7aa-41dc-ada3-024231f76e3d"
+storage_version_token = "1788319479263369"
+content_type = "application/octet-stream"

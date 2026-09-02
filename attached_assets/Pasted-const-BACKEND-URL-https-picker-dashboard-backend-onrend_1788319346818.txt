@@ -1,0 +1,423 @@
+const BACKEND_URL = "https://picker-dashboard-backend.onrender.com/api/picker-data";
+const ALERT_EMAIL = "tonydifiore1234567890@gmail.com";
+
+// ─── RUN ONCE TO TEST EMAIL PERMISSION ───────────────────────────────────────
+function testEmail() {
+  sendAlert("CPW Export — Test Alert", "Email alerts are working correctly.");
+}
+
+// ─── RUN ONCE TO SET UP TRIGGERS ─────────────────────────────────────────────
+function setupTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+  
+  ScriptApp.newTrigger("exportPickerData")
+    .timeBased()
+    .atHour(19)
+    .everyDays(1)
+    .inTimezone("America/New_York")
+    .create();
+
+  Logger.log("Daily trigger set: 7pm Eastern every day");
+}
+
+function exportPickerData() {
+  testExport();
+}
+
+function debugTyler() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheets().find(s => s.getName() === "4/20/2026");
+  if (!sheet) { Logger.log("Sheet not found"); return; }
+  const data = sheet.getDataRange().getValues();
+  const header = data[0];
+  for (let c = 0; c < header.length; c++) {
+    if (typeof header[c] === "string" && header[c].trim().toUpperCase() === "TYLER") {
+      Logger.log(`TYLER at col ${c}`);
+      for (let r = 1; r < data.length; r++) {
+        const order = data[r][c];
+        const lines = data[r][c+1];
+        const time  = data[r][c+2];
+        if (order || lines || time) {
+          Logger.log(`row ${r}: order=${order}, lines=${lines}, time=${time}, parsed=${parseTimeMins(time)}, type=${typeof time}`);
+        }
+      }
+    }
+  }
+}
+
+function testExport() {
+  Logger.log("=== STARTING EXPORT === " + new Date().toISOString());
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = ss.getSheets();
+  const allData = [];
+  const errors = [];
+
+  for (const sheet of sheets) {
+    const name = sheet.getName().trim();
+    const rowCount = sheet.getLastRow();
+    if (rowCount < 10) continue;
+    const match = name.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) continue;
+    const m = parseInt(match[1]);
+    const d = parseInt(match[2]);
+    const y = parseInt(match[3]);
+    if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2020) continue;
+    const dateLabel = `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    Logger.log(`Processing: ${name} → ${dateLabel}`);
+    const data = sheet.getDataRange().getValues();
+    if (!data || data.length < 2) continue;
+    const { records, sheetErrors } = parseSheetWithErrors(data, dateLabel);
+    Logger.log(`  → ${records.length} pickers, ${sheetErrors.length} parse errors`);
+    allData.push(...records);
+    errors.push(...sheetErrors);
+  }
+
+  Logger.log(`Total records: ${allData.length}, Total parse errors: ${errors.length}`);
+
+  if (allData.length === 0) {
+    const msg = "No data found — export aborted.";
+    Logger.log(msg);
+    sendAlert("CPW Picker Export — No Data Found", msg);
+    return;
+  }
+
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    recordCount: allData.length,
+    data: allData
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(BACKEND_URL, {
+      method: "POST",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    const code = response.getResponseCode();
+    Logger.log("HTTP: " + code);
+    
+    if (code !== 200 && code !== 201) {
+      const body = response.getContentText().slice(0, 500);
+      Logger.log("Error response: " + body);
+      sendAlert(
+        "CPW Picker Export FAILED — HTTP " + code,
+        `Export failed at ${new Date().toISOString()}\n\nHTTP ${code}\n\n${body}\n\nRecords attempted: ${allData.length}\nParse errors: ${errors.length}`
+      );
+    } else {
+      Logger.log(response.getContentText());
+      if (errors.length > 0) {
+        const errorLines = errors.map(e =>
+          `Date: ${e.date} | Picker: ${e.picker} | Col: ${e.col} | Value: "${e.rawValue}" | Issue: ${e.issue}`
+        ).join("\n");
+        sendAlert(
+          "CPW Picker Export — Completed With Parsing Errors",
+          `Export completed but ${errors.length} time values could not be parsed.\n\nRecords exported: ${allData.length}\n\nParsing errors:\n\n${errorLines}`
+        );
+      }
+    }
+  } catch(e) {
+    Logger.log("Fetch error: " + e.message);
+    sendAlert("CPW Picker Export — Network Error", `Export failed with error: ${e.message}`);
+  }
+
+  Logger.log("=== EXPORT COMPLETE === " + new Date().toISOString());
+}
+
+// ─── EMAIL ALERTS ─────────────────────────────────────────────────────────────
+function sendAlert(subject, body) {
+  try {
+    MailApp.sendEmail(ALERT_EMAIL, subject, body);
+    Logger.log("Alert sent: " + subject);
+  } catch(e) {
+    Logger.log("Could not send alert email: " + e.message);
+  }
+}
+
+// ─── TIME PARSING ─────────────────────────────────────────────────────────────
+function parseTimeMins(raw) {
+  if (raw === null || raw === undefined || raw === "") return null;
+
+  if (raw instanceof Date) {
+    const h = raw.getHours();
+    const m = raw.getMinutes();
+    if (h >= 0 && h < 24 && m >= 0 && m < 60) return h * 60 + m;
+    return null;
+  }
+
+  if (typeof raw === "number") {
+    if (raw > 0 && raw < 1) return Math.round(raw * 1440);
+
+    if (raw >= 1 && raw < 24 && raw % 1 !== 0) {
+      const h = Math.floor(raw);
+      const m = Math.round((raw % 1) * 100);
+      if (h < 24 && m < 60) return h * 60 + m;
+    }
+
+    if (raw >= 100) {
+      const s = String(Math.round(raw));
+      if (s.length === 3) { const h=parseInt(s[0]),m=parseInt(s.slice(1)); if(h<24&&m<60) return h*60+m; }
+      if (s.length === 4) { const h=parseInt(s.slice(0,2)),m=parseInt(s.slice(2)); if(h<24&&m<60) return h*60+m; }
+    }
+  }
+
+  if (typeof raw === "string") {
+    const cm = raw.trim().match(/^(\d{1,2})[;:](\d{2})(\s*(am|pm))?$/i);
+    if (cm) {
+      let h=parseInt(cm[1]), m=parseInt(cm[2]);
+      const period = (cm[4]||"").toLowerCase();
+      if (period === "pm" && h !== 12) h += 12;
+      if (period === "am" && h === 12) h = 0;
+      if (h<24&&m<60) return h*60+m;
+    }
+    if (/^\d{3,4}$/.test(raw.trim())) {
+      const s = raw.trim();
+      if (s.length===3) { const h=parseInt(s[0]),m=parseInt(s.slice(1)); if(h<24&&m<60) return h*60+m; }
+      if (s.length===4) { const h=parseInt(s.slice(0,2)),m=parseInt(s.slice(2)); if(h<24&&m<60) return h*60+m; }
+    }
+  }
+
+  return null;
+}
+
+function isValidTimestamp(t) {
+  if (t === null || t === undefined) return false;
+  return t >= 0 && t <= 1439;
+}
+
+function resolveAmbiguousTimes(times) {
+  if (times.length < 2) return times;
+
+  const clearTimes = times.filter(t => t >= 360);
+  const ambiguous  = times.filter(t => t < 360);
+
+  if (ambiguous.length === 0) return times;
+  if (clearTimes.length === 0) return times;
+
+  const sortedClear = [...clearTimes].sort((a,b) => a-b);
+  const midC = Math.floor(sortedClear.length / 2);
+  const anchor = sortedClear.length % 2 !== 0
+    ? sortedClear[midC]
+    : (sortedClear[midC-1] + sortedClear[midC]) / 2;
+
+  const sortedAmb = [...ambiguous].sort((a,b) => a-b);
+  const midA = Math.floor(sortedAmb.length / 2);
+  const ambAnchor = sortedAmb.length % 2 !== 0
+    ? sortedAmb[midA]
+    : (sortedAmb[midA-1] + sortedAmb[midA]) / 2;
+
+  const ambSpread = sortedAmb[sortedAmb.length-1] - sortedAmb[0];
+
+  const shouldConvertAll = ambSpread <= 480 &&
+    Math.abs(ambAnchor - anchor) > 180 &&
+    (ambAnchor + 720) <= 1439 &&
+    Math.abs(ambAnchor + 720 - anchor) < Math.abs(ambAnchor - anchor);
+
+  return times.map(t => {
+    if (t >= 360) return t;
+    const asPM = t + 720;
+    if (asPM > 1439) return null;
+    if (shouldConvertAll) return asPM;
+    const AM_DIST = Math.abs(t - anchor);
+    const PM_DIST = Math.abs(asPM - anchor);
+    if (PM_DIST < AM_DIST) return asPM;
+    if (AM_DIST > 360) return null;
+    return t;
+  }).filter(t => t !== null);
+}
+
+function removeOutliers(times) {
+  if (times.length < 2) return times;
+  const sorted = [...times].sort((a,b) => a-b);
+  const totalSpan = sorted[sorted.length-1] - sorted[0];
+  if (totalSpan > 720) {
+    let maxGap = 0, maxGapIdx = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = sorted[i] - sorted[i-1];
+      if (gap > maxGap) { maxGap = gap; maxGapIdx = i; }
+    }
+    const leftCount = maxGapIdx;
+    const rightCount = sorted.length - maxGapIdx;
+    if (leftCount <= rightCount) return sorted.slice(maxGapIdx);
+    else return sorted.slice(0, maxGapIdx);
+  }
+  if (sorted.length < 3) return sorted;
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid-1] + sorted[mid]) / 2;
+  return sorted.filter(t => Math.abs(t - median) <= 420);
+}
+
+function getActivityType(timeVal) {
+  if (timeVal === null || timeVal === undefined) return "pick";
+  if (timeVal instanceof Date) return "pick";
+  if (typeof timeVal !== "string") return "pick";
+  const upper = timeVal.toString().toUpperCase().trim();
+  if (upper.startsWith("LF")) return "lf";
+  if (upper.startsWith("RP")) return "rp";
+  if (upper.startsWith("SO")) return "so";
+  return "pick";
+}
+
+function isValidOrder(orderVal) {
+  if (orderVal === null || orderVal === undefined) return false;
+  const s = String(orderVal).trim();
+  if (s.length === 0) return false;
+  return /\d/.test(s);
+}
+
+// ─── SHEET PARSING WITH ERROR TRACKING ───────────────────────────────────────
+function parseSheetWithErrors(data, dateLabel) {
+  const headerRow = data[0];
+  const records = [];
+  const sheetErrors = [];
+  const skip = ["TIME","TEAM GOALS","JSC","PULLER"];
+
+  for (let col = 0; col < headerRow.length - 2; col += 3) {
+    const nameCell = headerRow[col];
+    if (typeof nameCell !== "string") continue;
+    const name = nameCell.trim();
+    if (!name || name.length < 2) continue;
+    if (skip.some(s => name.toUpperCase().includes(s))) continue;
+
+    const rowData = [];
+    const timestampOnlyTimes = [];
+
+    for (let row = 1; row < data.length; row++) {
+      const orderVal = data[row][col];
+      const linesVal = data[row][col+1];
+      const timeVal  = data[row][col+2];
+
+      const t = parseTimeMins(timeVal);
+      const activity = getActivityType(timeVal);
+
+      if (timeVal !== "" && timeVal !== null && timeVal !== undefined &&
+          !(timeVal instanceof Date) &&
+          t === null &&
+          typeof timeVal !== "object") {
+        const strVal = String(timeVal).trim().toUpperCase();
+        const isActivityPrefix = strVal.startsWith("LF") || strVal.startsWith("RP") || strVal.startsWith("SO") || strVal === "PW";
+        if (!isActivityPrefix) {
+          sheetErrors.push({
+            date: dateLabel,
+            picker: name,
+            col: col + 1,
+            rawValue: timeVal,
+            type: typeof timeVal,
+            issue: "Unrecognized time format"
+          });
+        }
+      }
+
+      if (!isValidOrder(orderVal)) {
+        if (activity === "pick" && isValidTimestamp(t)) {
+          timestampOnlyTimes.push(t);
+        }
+        continue;
+      }
+
+      if (typeof orderVal === "string" && isNaN(orderVal) && /[A-Za-z]{3,}/.test(orderVal) && !String(orderVal).toUpperCase().startsWith("LF")) continue;
+
+      const lines = parseFloat(linesVal);
+      if (isNaN(lines) || lines <= 0) continue;
+
+      const validTime = (activity === "pick" && isValidTimestamp(t)) ? t : null;
+      rowData.push({ orderVal, lines, timeVal, activity, timeMins: validTime });
+    }
+
+    let totalLines = 0, orderCount = 0;
+    let lfLines = 0, lfCount = 0;
+    let rpLines = 0, rpCount = 0;
+    let soLines = 0, soCount = 0;
+    let lfMinutes = 0;
+
+    const allRawTimes = [...timestampOnlyTimes];
+    for (const row of rowData) {
+      if (row.timeMins !== null) allRawTimes.push(row.timeMins);
+    }
+
+    const resolvedTimes = resolveAmbiguousTimes(allRawTimes);
+    const rawTimes = [...resolvedTimes];
+
+    let lastPickTime = null;
+    let inLFWindow = false;
+    let lfWindowStart = null;
+
+    for (let i = 0; i < rowData.length; i++) {
+      const row = rowData[i];
+
+      if (row.activity === "lf") {
+        lfCount++; lfLines += row.lines;
+        if (!inLFWindow && lastPickTime !== null) { inLFWindow = true; lfWindowStart = lastPickTime; }
+        continue;
+      }
+      if (row.activity === "rp") { rpCount++; rpLines += row.lines; continue; }
+      if (row.activity === "so") { soCount++; soLines += row.lines; continue; }
+
+      totalLines += row.lines;
+      orderCount++;
+
+      if (row.timeMins !== null) {
+        if (inLFWindow && lfWindowStart !== null) {
+          const lfDuration = row.timeMins - lfWindowStart;
+          if (lfDuration > 0 && lfDuration < 480) lfMinutes += lfDuration;
+          inLFWindow = false; lfWindowStart = null;
+        }
+        lastPickTime = row.timeMins;
+      }
+    }
+
+    if (orderCount === 0 && lfCount === 0 && rpCount === 0 && soCount === 0) continue;
+
+    const times = removeOutliers(rawTimes);
+    times.sort((a,b) => a-b);
+
+    const first = times[0] ?? null;
+    const last  = times[times.length-1] ?? null;
+    const hrs   = (first!==null && last!==null && last>first) ? (last-first)/60 : null;
+
+    const gaps = [];
+    for (let i = 1; i < times.length; i++) {
+      const diff = times[i]-times[i-1];
+      if (diff < 90) continue;
+      if (diff < 120 && lfCount > 0) continue;
+      let severity = "low";
+      if (diff >= 120 && diff < 180) severity = "medium";
+      if (diff >= 180) severity = "high";
+      gaps.push({ fromMins: times[i-1], toMins: times[i], gapMins: diff, severity });
+    }
+
+    const lfAvgMinsPerOrder = lfCount > 0 && lfMinutes > 0 ? lfMinutes / lfCount : null;
+    const lfPctOfShift = hrs > 0 && lfMinutes > 0 ? (lfMinutes / (hrs * 60)) * 100 : null;
+
+    records.push({
+      date: dateLabel,
+      picker: name.charAt(0).toUpperCase()+name.slice(1).toLowerCase(),
+      orders: orderCount,
+      totalLines,
+      avgLinesPerOrder: orderCount ? totalLines/orderCount : null,
+      activeHrs: hrs,
+      linesPerHr: hrs ? totalLines/hrs : null,
+      ordersPerHr: hrs ? orderCount/hrs : null,
+      firstTimeMins: first,
+      lastTimeMins: last,
+      hasGaps: gaps.length > 0,
+      gaps,
+      lfOrders: lfCount,
+      lfLines,
+      lfMinutes,
+      lfAvgMinsPerOrder,
+      lfPctOfShift,
+      rpOrders: rpCount,
+      rpLines,
+      soOrders: soCount,
+      soLines,
+      orderDetail: []
+    });
+  }
+  return { records, sheetErrors };
+}
+
+function parseSheet(data, dateLabel) {
+  return parseSheetWithErrors(data, dateLabel).records;
+}
