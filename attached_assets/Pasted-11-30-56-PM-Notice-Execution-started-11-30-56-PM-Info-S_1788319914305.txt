@@ -1,0 +1,66 @@
+11:30:56 PM	Notice	Execution started
+11:30:56 PM	Info	=== STARTING EXPORT === 2026-09-02T03:30:56.127Z
+11:30:56 PM	Info	Processing 8/3/2026 as 2026-08-03
+11:30:57 PM	Info	  -> 15 pickers, 1 parse warnings
+11:30:57 PM	Info	Processing 8/4/2026 as 2026-08-04
+11:30:57 PM	Info	  -> 19 pickers, 10 parse warnings
+11:30:58 PM	Info	Processing 8/7/2026 as 2026-08-07
+11:30:58 PM	Info	  -> 10 pickers, 0 parse warnings
+11:30:58 PM	Info	Processing 8/5/2026 as 2026-08-05
+11:30:59 PM	Info	  -> 17 pickers, 1 parse warnings
+11:30:59 PM	Info	Processing 8/6/2026 as 2026-08-06
+11:30:59 PM	Info	  -> 16 pickers, 1 parse warnings
+11:30:59 PM	Info	Processing 8/8/2026 as 2026-08-08
+11:31:00 PM	Info	  -> 12 pickers, 4 parse warnings
+11:31:00 PM	Info	Processing 8/9/2026 as 2026-08-09
+11:31:00 PM	Info	  -> 12 pickers, 16 parse warnings
+11:31:00 PM	Info	Processing 8/13/2026 as 2026-08-13
+11:31:01 PM	Info	  -> 15 pickers, 1 parse warnings
+11:31:01 PM	Info	Processing 8/10/2026 as 2026-08-10
+11:31:01 PM	Info	  -> 13 pickers, 0 parse warnings
+11:31:01 PM	Info	Processing 8/11/2026 as 2026-08-11
+11:31:02 PM	Info	  -> 21 pickers, 2 parse warnings
+11:31:02 PM	Info	Processing 8/12/2026 as 2026-08-12
+11:31:02 PM	Info	  -> 17 pickers, 1 parse warnings
+11:31:02 PM	Info	Processing 8/14/2026 as 2026-08-14
+11:31:03 PM	Info	  -> 14 pickers, 0 parse warnings
+11:31:03 PM	Info	Processing 8/15/2026 as 2026-08-15
+11:31:03 PM	Info	  -> 9 pickers, 4 parse warnings
+11:31:03 PM	Info	Processing 8/16/2026 as 2026-08-16
+11:31:04 PM	Info	  -> 9 pickers, 28 parse warnings
+11:31:04 PM	Info	Processing 8/17/2026 as 2026-08-17
+11:31:04 PM	Info	  -> 13 pickers, 6 parse warnings
+11:31:04 PM	Info	Processing 8/18/2026 as 2026-08-18
+11:31:05 PM	Info	  -> 16 pickers, 12 parse warnings
+11:31:05 PM	Info	Processing 8/19/2026 as 2026-08-19
+11:31:06 PM	Info	  -> 14 pickers, 3 parse warnings
+11:31:06 PM	Info	Processing 8/20/2026 as 2026-08-20
+11:31:06 PM	Info	  -> 13 pickers, 2 parse warnings
+11:31:06 PM	Info	Processing 8/21/2026 as 2026-08-21
+11:31:07 PM	Info	  -> 16 pickers, 1 parse warnings
+11:31:07 PM	Info	Processing 8/22/2026 as 2026-08-22
+11:31:08 PM	Info	  -> 5 pickers, 0 parse warnings
+11:31:08 PM	Info	Processing 8/23/2026 as 2026-08-23
+11:31:08 PM	Info	  -> 10 pickers, 9 parse warnings
+11:31:09 PM	Info	Processing 8/24/2026 as 2026-08-24
+11:31:09 PM	Info	  -> 16 pickers, 5 parse warnings
+11:31:09 PM	Info	Processing 8/25/2026 as 2026-08-25
+11:31:10 PM	Info	  -> 20 pickers, 14 parse warnings
+11:31:10 PM	Info	Processing 8/26/2026 as 2026-08-26
+11:31:10 PM	Info	  -> 19 pickers, 2 parse warnings
+11:31:10 PM	Info	Processing 8/29/2026 as 2026-08-29
+11:31:11 PM	Info	  -> 8 pickers, 0 parse warnings
+11:31:11 PM	Info	Processing 8/30/2026 as 2026-08-30
+11:31:11 PM	Info	  -> 9 pickers, 17 parse warnings
+11:31:11 PM	Info	Processing 8/31/2026 as 2026-08-31
+11:31:12 PM	Info	  -> 16 pickers, 5 parse warnings
+11:31:12 PM	Info	Processing 9/1/2026 as 2026-09-01
+11:31:13 PM	Info	  -> 5 pickers, 0 parse warnings
+11:31:16 PM	Info	Prepared 377 unique records with 145 parse warnings.
+11:31:19 PM	Info	Batch 1 uploaded: {"inserted":100,"exported_at":"2026-09-02T03:31:16.991Z"}
+11:31:21 PM	Info	Batch 2 uploaded: {"inserted":100,"exported_at":"2026-09-02T03:31:16.991Z"}
+11:31:22 PM	Info	Batch 3 uploaded: {"inserted":100,"exported_at":"2026-09-02T03:31:16.991Z"}
+11:31:25 PM	Info	Batch 4 uploaded: {"inserted":77,"exported_at":"2026-09-02T03:31:16.991Z"}
+11:31:25 PM	Info	Alert sent: CPW Picker Export — Completed With Parsing Warnings
+11:31:25 PM	Info	=== EXPORT COMPLETE === uploaded=377 warnings=145 finished=2026-09-02T03:31:25.160Z
+11:31:26 PM	Notice	Execution completed
