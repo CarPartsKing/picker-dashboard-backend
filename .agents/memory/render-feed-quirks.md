@@ -19,3 +19,9 @@ The dashboard's live data comes from a user-controlled external backend (picker-
 **Designators:** Sheet time cells can carry designators instead of times: LF (look-for, time subtracted from L/Hr denominator), RP and SO (recognized and counted, but time NOT subtracted — no policy set). As of Jul 2026 the feed exposes rp_/so_ fields but all values are zero.
 
 **Canonical L/Hr formula (all sources):** lines ÷ max((last − first) − lfMinutes, 1) × 60. The feed's own lines_per_hr uses the raw window — never trust it; recompute. Weekly day-of-week team rate is hours-weighted (total lines ÷ total effective hours), not an average of daily averages.
+
+**Sheet layout:** Each picker occupies a repeating three-column block: order number, line count, then exact order-start timestamp. Rows descend chronologically; the interval between consecutive timestamps represents pull duration. Activity values can combine a code and timestamp (for example, LF1142 means an LF order starting at 11:42).
+
+**Why:** The time column is not merely a shift-start/shift-end source. Dropping timestamps embedded in LF/RP/SO entries distorts both the work timeline and LF duration.
+
+**How to apply:** Preserve every valid activity timestamp in chronological calculations. For LF duration, start at the LF entry's own embedded timestamp and end at the next ordinary pick timestamp; only fall back to the preceding pick for legacy LF values without a timestamp.

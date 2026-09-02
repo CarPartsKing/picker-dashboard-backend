@@ -290,10 +290,16 @@ function parseTimeMins(raw) {
     return null;
   }
 
-  const value = cleanTimeString_(raw)
+  let value = cleanTimeString_(raw)
     .replace(/^[`\\]+/, "")
     .replace(/'/g, "")
+    .replace(/,/g, "")
     .replace(/[.,]+$/, "");
+
+  // Activity codes may be immediately followed by their exact start time:
+  // LF1142, LF12:19, RP305, SO4:10 PM.
+  value = value.replace(/^(LF|RP|SO)\s*/i, "");
+  if (!value) return null;
 
   // Hour only, optionally with AM/PM: 1, 10, 5 PM.
   let match = value.match(/^(\d{1,2})\s*(a\.?m\.?|p\.?m\.?)?$/i);
@@ -508,9 +514,7 @@ function parseSheetWithErrors(data, dateLabel) {
         key: "row-" + rowIndex,
         lines: lines,
         activity: activity,
-        timeMins: activity === "pick" && isValidTimestamp(parsedTime)
-          ? parsedTime
-          : null
+        timeMins: isValidTimestamp(parsedTime) ? parsedTime : null
       };
       rows.push(row);
       if (row.timeMins !== null) {
@@ -545,8 +549,10 @@ function parseSheetWithErrors(data, dateLabel) {
       if (row.activity === "lf") {
         lfCount++;
         lfLines += row.lines;
-        if (lfWindowStart === null && lastPickTime !== null) {
-          lfWindowStart = lastPickTime;
+        if (lfWindowStart === null) {
+          // Prefer the LF order's own start timestamp. Fall back to the
+          // preceding pick only for legacy LF entries without a timestamp.
+          lfWindowStart = row.timeMins !== null ? row.timeMins : lastPickTime;
         }
         return;
       }
