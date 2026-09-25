@@ -3226,7 +3226,16 @@ export default function App() {
     const liveKeys = new Set([...localKeys, ...liveFiltered.map(s => `${s.pickerName}|${s.dateStr}`)]);
 
     // Our DB stats (3rd priority — historical uploads)
-    const apiRows = (apiStats ?? []).filter(s => !liveKeys.has(`${normalizeName(s.pickerName)}|${s.dateStr}`));
+    // Rows archived before a name fix can sit next to the canonical row for the
+    // same day ("0ssie" and "Ossie") — keep only the newest per picker+date.
+    const apiByKey = new Map<string, ApiDayStat>();
+    for (const s of apiStats ?? []) {
+      const key = `${normalizeName(s.pickerName)}|${s.dateStr}`;
+      if (liveKeys.has(key)) continue;
+      const prev = apiByKey.get(key);
+      if (!prev || s.createdAt > prev.createdAt) apiByKey.set(key, s);
+    }
+    const apiRows = [...apiByKey.values()];
     const apiMapped: DayStats[] = apiRows.map(s => ({
       pickerName: normalizeName(s.pickerName),
       dateStr: s.dateStr,

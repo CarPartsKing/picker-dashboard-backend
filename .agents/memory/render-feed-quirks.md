@@ -10,7 +10,7 @@ The dashboard's live data comes from a user-controlled external backend (picker-
 - Gap detection sorts raw time strings instead of parsed minutes → gaps that start exactly at first_time_mins (~33 records). L/Hr parsing was fixed separately; the gap path was not.
 - Pickers type 12-hour colon times (e.g. "5:09" = 5:09 PM); Render converts to 24h. Some pickers' formats still fail (Brandon, Bryan never get L/Hr).
 - Sherri's active windows are systematically tiny → inflated L/Hr (>100).
-- Name duplicates come from the sheet: Ossie vs 0ssie (digit zero), Taurean/Taureen, Will/William, Andy/Andy!, etc. Our normalizeName does Title Case but doesn't strip punctuation.
+- Name duplicates come from the sheet: Ossie vs 0ssie (digit zero), Taurean/Taureen, Will/William, Andy/Andy!, etc. Since Sep 2026 normalizeName (parseUtils.ts, mirrored in api-server dashboard.ts) strips punctuation, reads a zero beside letters as O, drops number-only words, then applies PICKER_NAME_ALIASES. Only alias two names after confirming they never share a date — Anthony/Anthonya/Anthonyd and Tayja/Taylor do, so they are different people.
 
 **How to apply:** when data looks wrong, first check whether it's a feed-side bug (audit via `curl localhost:80/api/dashboard/live-data`) before touching dashboard code.
 

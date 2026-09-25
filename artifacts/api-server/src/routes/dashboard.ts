@@ -224,14 +224,28 @@ const LiveResponseSchema = z.object({
   data: z.array(LiveRecordSchema),
 });
 
-// Mirrors the dashboard frontend's normalizeName so archived rows merge
-// cleanly with live rows on the picker_name|date_str key.
+// Mirrors the dashboard frontend's normalizeName and PICKER_NAME_ALIASES
+// (picker-dashboard/src/parseUtils.ts) so archived rows merge cleanly with
+// live rows on the picker_name|date_str key. Keep the two in sync.
+const PICKER_NAME_ALIASES: Record<string, string> = {
+  Jreremy: "Jeremy",
+  Jaypitt: "Jay Pitt",
+  "Anthony A": "Anthonya",
+};
+
 function normalizeName(raw: string): string {
-  return raw.trim().split(/\s+/).map((word) => {
+  const cleaned = raw
+    .replace(/[^\p{L}\p{N}\s'.-]/gu, "")
+    .replace(/0(?=\p{L})|(?<=\p{L})0/gu, "o")
+    .split(/\s+/)
+    .filter((word) => word && !/^\d+$/.test(word));
+  const words = cleaned.length ? cleaned : raw.trim().split(/\s+/);
+  const titled = words.map((word) => {
     if (!word) return word;
     if (word.length <= 3 && /^[A-Z]+$/.test(word)) return word;
     return word[0].toUpperCase() + word.slice(1).toLowerCase();
   }).join(" ");
+  return PICKER_NAME_ALIASES[titled] ?? titled;
 }
 
 const ARCHIVE_MIN_INTERVAL_MS = 10 * 60 * 1000;

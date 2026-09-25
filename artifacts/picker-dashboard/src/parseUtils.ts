@@ -22,18 +22,38 @@ export interface PickerDayRaw {
 
 export const SKIP_RE = /^(pullers|team[\s_]?goals?|notes?|total|goals?|goal|#)/i;
 
-// Normalise a picker name so casing variants (ANTHONY / anthony / Anthony) all
-// resolve to the same canonical display form.
+// Misspellings the sheet produces for the same person, keyed by the cleaned,
+// title-cased form. Only add a pair after confirming the two never appear on
+// the same date — two names on one day means two people (e.g. Anthony and
+// Anthonya). Mirrored in api-server/src/routes/dashboard.ts.
+export const PICKER_NAME_ALIASES: Record<string, string> = {
+  'Jreremy': 'Jeremy',
+  'Jaypitt': 'Jay Pitt',
+  'Anthony A': 'Anthonya',
+};
+
+// Normalise a picker name so casing and typing variants (ANTHONY / anthony,
+// 0ssie / Ossie, Andy! / Andy) all resolve to the same canonical display form.
 // Rules:
-//   • Trim surrounding whitespace
+//   • Drop stray punctuation ("Andy!" → "Andy")
+//   • A zero touching letters is a typed O ("0ssie" → "Ossie")
+//   • Drop number-only words such as IDs ("Eric  356025562" → "Eric")
 //   • Each word: first letter upper, rest lower
 //   • Exception: all-caps words of ≤ 3 alpha chars are kept as-is (e.g. MJ, AJ)
+//   • Then apply PICKER_NAME_ALIASES
 export function normalizeName(raw: string): string {
-  return raw.trim().split(/\s+/).map(word => {
+  const cleaned = raw
+    .replace(/[^\p{L}\p{N}\s'.-]/gu, '')
+    .replace(/0(?=\p{L})|(?<=\p{L})0/gu, 'o')
+    .split(/\s+/)
+    .filter(word => word && !/^\d+$/.test(word));
+  const words = cleaned.length ? cleaned : raw.trim().split(/\s+/);
+  const titled = words.map(word => {
     if (!word) return word;
     if (word.length <= 3 && /^[A-Z]+$/.test(word)) return word;
     return word[0].toUpperCase() + word.slice(1).toLowerCase();
   }).join(' ');
+  return PICKER_NAME_ALIASES[titled] ?? titled;
 }
 
 export function parseTabDate(tabName: string): Date | null {
