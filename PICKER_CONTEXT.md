@@ -129,6 +129,14 @@ the higher priority wins:
 
 - **L/Hr, the same formula for every source:** `lines ÷ max((last − first) − LF minutes, 1) × 60`.
   Minutes are rounded the same way on the server and in the browser, so live and archived rows agree.
+- **30-minute minimum for a rate** (Tony, 2026-09-25). A day with less than 30 minutes of picking time
+  (window minus LF minutes) gets **no L/Hr or orders/hr**, but its lines and orders still count. This
+  lives in `MIN_RATE_WINDOW_MINS` in `App.tsx` and in the api-server archive, and is also applied when
+  saved rows are read. On the full feed it removes 43 of 2,293 rates. Days over 100 L/Hr drop from
+  16 to 7, and the maximum falls from 480 to 141.
+  - The 7 left are 30–45 minute windows with 50–80 orders (Scott Aug 26, Jhai Jul 21, Sherri May 10 and
+    Apr 12), or Anthony's LF-heavy days in old exports. They are real high rates or old AM/PM
+    mistakes, not tiny windows.
 - **Team and weekly rates are weighted by hours:** total lines ÷ total effective hours. They are
   not an average of daily rates.
 - **12-hour times and shift hours.** Pickers write times without AM/PM. The shift runs from **6 AM to

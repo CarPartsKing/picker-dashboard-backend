@@ -147,6 +147,15 @@ function removePhantomTimes(times: number[]): number[] {
   return times;
 }
 
+// A day whose picking time (window minus look-for time) is under 30 minutes gets
+// no L/Hr or orders/hr: 8 lines in one minute is not a 480/hr picker (Tony,
+// 2026-09-25). Its lines and orders still count. Mirrored in the api-server.
+const MIN_RATE_WINDOW_MINS = 30;
+
+function hasRateWindow(effectiveMinutes: number | null | undefined): effectiveMinutes is number {
+  return effectiveMinutes != null && effectiveMinutes >= MIN_RATE_WINDOW_MINS;
+}
+
 // A sheet column whose header was retyped between exports ("0ssie" then
 // "Ossie") leaves both rows in Supabase with identical figures. After name rules
 // they share a picker+date, so keep only the most recently exported one.
@@ -216,7 +225,7 @@ function computeDayStats(data: PickerDayData): DayStats {
     activeWindowMinutes = lastTime - firstTime;
     // Subtract LF time so a picker isn't penalised for time spent on look-fors.
     const effectiveWindow = Math.max(activeWindowMinutes - lfWindowMinutes, 1);
-    if (effectiveWindow > 0) {
+    if (hasRateWindow(effectiveWindow)) {
       linesPerHour  = (totalLines  / effectiveWindow) * 60;
       ordersPerHour = (totalOrders / effectiveWindow) * 60;
     }
@@ -2966,7 +2975,7 @@ export default function App() {
     const effectiveMins = windowMins != null ? Math.max(windowMins - (r.lf_minutes ?? 0), 1) : null;
     const linesPerHour =
       effectiveMins != null
-        ? r.total_lines != null
+        ? r.total_lines != null && hasRateWindow(effectiveMins)
           ? (r.total_lines / effectiveMins) * 60
           : null
         : timingMissing
@@ -2974,7 +2983,7 @@ export default function App() {
           : null;
     const ordersPerHour =
       effectiveMins != null
-        ? r.orders != null
+        ? r.orders != null && hasRateWindow(effectiveMins)
           ? (r.orders / effectiveMins) * 60
           : null
         : timingMissing
@@ -3250,14 +3259,18 @@ export default function App() {
       if (!prev || s.createdAt > prev.createdAt) apiByKey.set(key, s);
     }
     const apiRows = [...apiByKey.values()];
+    // Rows saved before the 30-minute rule still carry their old rates.
+    const tooShort = (s: ApiDayStat) =>
+      s.activeWindowMinutes != null &&
+      !hasRateWindow(Math.max(s.activeWindowMinutes - (s.lfMinutes ?? 0), 1));
     const apiMapped: DayStats[] = apiRows.map(s => ({
       pickerName: normalizeName(s.pickerName),
       dateStr: s.dateStr,
       date: new Date(s.dateStr + 'T12:00:00'),
       totalOrders: s.totalOrders,
       totalLines: s.totalLines,
-      linesPerHour: s.linesPerHour,
-      ordersPerHour: s.ordersPerHour,
+      linesPerHour: tooShort(s) ? null : s.linesPerHour,
+      ordersPerHour: tooShort(s) ? null : s.ordersPerHour,
       avgLinesPerOrder: s.avgLinesPerOrder ?? 0,
       activeWindowMinutes: s.activeWindowMinutes,
       firstTime: s.firstTimeMins ?? null,

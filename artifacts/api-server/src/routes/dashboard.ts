@@ -256,6 +256,7 @@ function normalizeName(raw: string): string {
   return PICKER_NAME_ALIASES[titled] ?? titled;
 }
 
+const MIN_RATE_WINDOW_MINS = 30;
 const ARCHIVE_MIN_INTERVAL_MS = 10 * 60 * 1000;
 let lastArchiveAt = 0;
 let archiveInFlight = false;
@@ -295,9 +296,12 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
     const timingMissing = first == null || last == null;
     const windowMins = !timingMissing && last > first ? last - first : null;
     const effectiveMins = windowMins != null ? Math.max(windowMins - (r.lf_minutes ?? 0), 1) : null;
+    // Under 30 minutes of picking time → no rate (MIN_RATE_WINDOW_MINS in the
+    // dashboard's App.tsx); the day's lines and orders still count.
+    const rateWindow = effectiveMins != null && effectiveMins >= MIN_RATE_WINDOW_MINS;
     const linesPerHour =
       effectiveMins != null
-        ? r.total_lines != null
+        ? r.total_lines != null && rateWindow
           ? (r.total_lines / effectiveMins) * 60
           : null
         : timingMissing
@@ -305,7 +309,7 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
           : null;
     const ordersPerHour =
       effectiveMins != null
-        ? r.orders != null
+        ? r.orders != null && rateWindow
           ? (r.orders / effectiveMins) * 60
           : null
         : timingMissing
