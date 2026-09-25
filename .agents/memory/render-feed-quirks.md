@@ -4,7 +4,7 @@ description: External picker-data feed (user-controlled Render backend) limits a
 ---
 The dashboard's live data comes from a user-controlled external backend (picker-dashboard-backend.onrender.com), fed by Google Sheets via Apps Script. Changes to the Apps Script must be pasted and run by the sheet owner.
 
-**Rolling cap:** The feed exports at most ~1000 records (rolling window). Older days silently fall off. **Why:** discovered Jul 2026 when April data vanished. The api-server's live-data route now auto-archives every pull into `dashboard_stats` — that DB is the only durable history.
+**No rolling cap — corrected 2026-09-25:** The "~1000 record rolling window" seen in Jul 2026 was never lost data. It was Supabase's default 1,000-rows-per-request limit, hit because the Render GET didn't page. Render now pages (backend_server.py `_select_all`, commit 3d39081), and the feed returns the full history: 2,424 records from 2026-04-01 on the day of the fix. Supabase holds everything, because the Apps Script upserts and never deletes. The live-data auto-archive into `dashboard_stats` is now a second copy and fallback, not the only durable history. **How to apply:** don't build workarounds for "old days falling off". If the feed count ever sits at a round number again, suspect a row limit first. Full project record: `PICKER_CONTEXT.md` at the repo root.
 
 **Known upstream bugs (owner = user/Render, not our code):**
 - Gap detection sorts raw time strings instead of parsed minutes → gaps that start exactly at first_time_mins (~33 records). L/Hr parsing was fixed separately; the gap path was not.

@@ -1,1 +1,1 @@
-- [Render live-feed quirks](render-feed-quirks.md) — external feed caps at ~1000 rolling records (we auto-archive to DB); gap/time/name bugs are upstream, user-owned.
+- [Render live-feed quirks](render-feed-quirks.md) — the old ~1000-record "rolling cap" was a Supabase row limit, fixed 2026-09-25, so the feed now returns full history (archive is a backup); gap/time/name bugs are upstream, user-owned. Full record: PICKER_CONTEXT.md.

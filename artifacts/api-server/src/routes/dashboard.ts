@@ -186,8 +186,10 @@ router.delete("/dashboard/stats", async (req: Request, res: Response): Promise<v
 const EXTERNAL_API = process.env.EXTERNAL_API_URL ?? "https://picker-dashboard-backend.onrender.com/api/picker-data";
 
 // ── Live-feed auto-archive ──────────────────────────────────────────────────
-// The Render backend caps its export at ~1000 records (rolling window), so
-// older days silently fall off the feed. Every time we proxy the live feed we
+// The Render feed used to stop at Supabase's 1,000-row request limit, so older
+// days looked like they had fallen off. Render pages now (2026-09-25) and the
+// feed carries full history; this archive is kept as a backup copy that
+// survives a Render or Supabase outage. Every time we proxy the live feed we
 // also upsert the records into dashboard_stats so history is preserved.
 
 const LiveGapSchema = z.object({

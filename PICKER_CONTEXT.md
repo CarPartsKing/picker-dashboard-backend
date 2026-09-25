@@ -145,21 +145,24 @@ the higher priority wins:
 
 ## 4. Known problems and traps
 
-- **The "~1,000 record rolling cap" is probably Supabase's default row limit, not lost data
-  (unverified).**
-  - Render's GET asks Supabase for every row without paging, and Supabase returns at most 1,000 rows
-    per request by default. The feed returns exactly 1,000.
-  - The Apps Script upserts and never deletes, so older days are probably still in Supabase. They just
-    don't come back in the GET.
-  - The Replit agent read this as "older days fall off" and built the archive to cope.
-  - **Fixed 2026-09-24 in `backend_server.py`.** `_select_all` pages with `limit`/`offset` until it
-    gets an empty page. `GET /api/picker-data` and the LF specialist recalculation both use it.
-    Picker names in the LF in-list are now quoted, because a comma in a raw sheet name used to break
-    the query.
-  - Tested against a fake Supabase with a 1,000-row cap and a 400-row cap. The old code returned
-    exactly 1,000 rows; the new code returns all of them.
-  - **After Render deploys**, `recordCount` above 1,000 on the live feed confirms that older days were
-    in Supabase all along.
+- **The "~1,000 record rolling cap" was Supabase's default row limit, not lost data. Fixed and
+  confirmed 2026-09-25.**
+  - Render's GET used to ask Supabase for every row in a single request. Supabase returns at most
+    1,000 rows per request, so the feed stopped at exactly 1,000 (Jul 3 to Sep 24). The Replit agent
+    read that as "older days fall off" and built the archive to cope.
+  - `backend_server.py` (commit `3d39081`) now pages with `limit`/`offset` until it gets an empty page,
+    using `_select_all`. `GET /api/picker-data` and the LF specialist recalculation both use it. Picker
+    names in the LF in-list are quoted, because a comma in a raw sheet name used to break the query.
+  - **Confirmed live:** after the deploy the feed returned **2,424 records from 2026-04-01**, with one
+    row per picker per day, across 167 days. Supabase holds the full history, because the Apps Script
+    upserts and never deletes.
+  - The Replit archive (`source = live`) is now a second copy, not the only one. It's still useful as
+    a fallback if Render or Supabase is down.
+  - The feed grows by about 15 rows a day, and Render takes about 0.5 s per 1,000 rows. That is far
+    inside the Replit proxy's 15 s timeout, but if the feed ever gets slow, add `from`/`to` filters
+    to the Render GET.
+  - LF specialist flags are only recalculated when an export arrives, so the first post-fix
+    recalculation over the full history is the 2026-09-25 7 PM export.
 - **Gap detection on Render** sorts raw time strings instead of parsed minutes. About 33 records have
   gaps that start at the first time of the day.
 - **Some pickers never get an L/Hr** because their time format fails to parse (Brandon, Bryan in past
