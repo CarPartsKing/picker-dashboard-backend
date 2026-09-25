@@ -62,7 +62,9 @@ the higher priority wins:
 
 ### 2.2 Apps Script: `fixes/CPW_Picker_Export.gs`
 
-- **Version `2026-09-02-v3`** is the copy to use (the Replit asset metadata calls it "Use This Copy").
+- **Version `2026-09-25-v4`** is the copy to use. It adds the shift-hours rule for 12-hour times (§3).
+  The Replit asset metadata still labels v3 "Use This Copy"; ignore that. **v4 only takes effect once
+  someone pastes it into the Sheet** (see below).
   It runs daily at **7 PM Eastern** (`setupTriggers()`), reads **every dated tab**, merges duplicates,
   and uploads in batches of 100 with retries.
 - **Emails:**
@@ -129,7 +131,18 @@ the higher priority wins:
   Minutes are rounded the same way on the server and in the browser, so live and archived rows agree.
 - **Team and weekly rates are weighted by hours:** total lines ÷ total effective hours. They are
   not an average of daily rates.
+- **12-hour times and shift hours.** Pickers write times without AM/PM. The shift runs from **6 AM to
+  about 8 PM** (Tony, 2026-09-25). Each picker's times are read in sheet-row order, which is time order:
+  - **before 6:00:** PM (`1:07` means 1:07 PM)
+  - **6:00 to 8:30:** PM once the day has reached noon, otherwise AM
+  - **8:31 to 11:59, and 12:00 onward:** as written
+
+  The rule lives in two places that must stay in sync: `resolveTimeEntries_` in the Apps Script (the
+  live feed) and `resolveShiftTimes` in `parseUtils.ts` (dragged-in .xlsx files). On 2026-09-25 both
+  copies agreed on 20,000 random sequences. The dashboard's older "phantom timestamp" filter, which
+  drops times before 4 AM, now has nothing to catch.
 - **Gap flags:** a gap of 90 minutes or more is flagged. Low under 120, Med 120–179, High 180+.
+  Times are sorted as numbers before gaps are found, everywhere.
 - **Picking totals leave out** LF, RP and SO orders. Those are counted separately.
 - **Names** (`normalizeName` in `parseUtils.ts`, copied in `api-server/src/routes/dashboard.ts`, keep
   the two in sync):
@@ -163,8 +176,20 @@ the higher priority wins:
     to the Render GET.
   - LF specialist flags are only recalculated when an export arrives, so the first post-fix
     recalculation over the full history is the 2026-09-25 7 PM export.
-- **Gap detection on Render** sorts raw time strings instead of parsed minutes. About 33 records have
-  gaps that start at the first time of the day.
+- **The "gap detection sorts time strings" bug does not exist** in the v3 or v4 script. Both sort as
+  numbers. The real cause of bad gaps was **afternoon times read as early morning**:
+  - In the 2026-09-24 export, **202 of 670 picker-days started before 6 AM** (76 at 1 AM, 64 at 2 AM).
+  - v3 only moved a day's small numbers to PM when that looked closer to its unambiguous times, so it
+    often guessed wrong. Darrell on Sep 21 read as 1:07–8:00 AM. A 6:30 AM to 7:50 PM day read as
+    3:15 AM to 2:00 PM.
+  - **Fixed in v4 (2026-09-25)** with the shift-hours rule (§3).
+  - **Old rows keep the wrong times.** 1,754 of the 2,424 rows come from exports on May 3, Jun 30 and
+    Jul 23. Their sheet tabs are no longer exported, so v4 can't reach them. Only the raw sheet tabs
+    could fix them.
+- **Duplicate columns merge their gaps badly.** When one name has two columns on the same day, both the
+  Apps Script (`mergeDuplicateRecords_`) and Render (`_dedup`) join the two gap lists instead of
+  recomputing gaps on the combined times, which produces overlapping gaps (Anthony, Jul 20–23). Before
+  August this may have been two different Anthonys writing plain "Anthony". Not fixed.
 - **Some pickers never get an L/Hr** because their time format fails to parse (Brandon, Bryan in past
   data). **Sherri's** active windows are tiny, so her L/Hr is inflated above 100.
 - **`is_lf_specialist` has two sources.** Render calculates it, and the Replit archive copies whatever

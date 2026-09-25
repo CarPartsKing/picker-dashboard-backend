@@ -4,7 +4,7 @@ const EXPORT_TIME_ZONE = "America/New_York";
 const EXPORT_HOUR = 19;
 const UPLOAD_BATCH_SIZE = 100;
 const MAX_ERROR_DETAILS = 100;
-const SCRIPT_VERSION = "2026-09-02-v3";
+const SCRIPT_VERSION = "2026-09-25-v4";
 
 /**
  * Optional security:
@@ -390,41 +390,27 @@ function isValidOrder(orderValue) {
   return /\d/.test(String(orderValue).trim());
 }
 
+// Pickers write 12-hour times without AM/PM ("1:07" means 1:07 PM). The shift
+// runs from 6:00 AM to about 8 PM, and entries arrive in sheet-row order, which
+// is time order, so each time is read in turn:
+//   - before 6:00        -> PM (nobody starts before 6 AM)
+//   - 6:00-8:30          -> PM once the day has reached noon, otherwise AM
+//   - 8:31-11:59, 12:00+ -> as written
+// Mirrored in the dashboard (parseUtils.ts resolveShiftTimes). Keep in sync.
+const SHIFT_START_MINS = 6 * 60;
+const LATEST_FINISH_MINS = 20 * 60 + 30;
+
 function resolveTimeEntries_(entries) {
-  if (entries.length < 2) return entries.slice();
-
-  const clear = entries
-    .map(function (entry) { return entry.minutes; })
-    .filter(function (minutes) { return minutes >= 360; })
-    .sort(function (a, b) { return a - b; });
-
-  const ambiguous = entries
-    .map(function (entry) { return entry.minutes; })
-    .filter(function (minutes) { return minutes < 360; })
-    .sort(function (a, b) { return a - b; });
-
-  if (!clear.length || !ambiguous.length) return entries.slice();
-
-  const clearAnchor = median_(clear);
-  const ambiguousAnchor = median_(ambiguous);
-  const spread = ambiguous[ambiguous.length - 1] - ambiguous[0];
-  const convertAll = (
-    spread <= 480 &&
-    ambiguousAnchor + 720 <= 1439 &&
-    Math.abs(ambiguousAnchor + 720 - clearAnchor) <
-      Math.abs(ambiguousAnchor - clearAnchor)
-  );
-
+  let afternoon = false;
   return entries.map(function (entry) {
-    if (entry.minutes >= 360) return entry;
-    const asPm = entry.minutes + 720;
-    if (asPm > 1439) return entry;
-
-    if (convertAll ||
-        Math.abs(asPm - clearAnchor) < Math.abs(entry.minutes - clearAnchor)) {
-      return Object.assign({}, entry, { minutes: asPm });
+    let minutes = entry.minutes;
+    if (minutes < SHIFT_START_MINS) {
+      minutes += 720;
+    } else if (afternoon && minutes < 720 && minutes + 720 <= LATEST_FINISH_MINS) {
+      minutes += 720;
     }
-    return entry;
+    if (minutes >= 720) afternoon = true;
+    return minutes === entry.minutes ? entry : Object.assign({}, entry, { minutes: minutes });
   });
 }
 
@@ -440,7 +426,9 @@ function removeOutliers(times) {
   const sorted = times.slice().sort(function (a, b) { return a - b; });
   const totalSpan = sorted[sorted.length - 1] - sorted[0];
 
-  if (totalSpan > 720) {
+  // A day longer than the whole shift (6 AM to 8:30 PM) can only come from a
+  // stray entry outside it, such as a 24-hour "2100"; split it off.
+  if (totalSpan > LATEST_FINISH_MINS - SHIFT_START_MINS) {
     let maximumGap = 0;
     let splitAt = 0;
     for (let index = 1; index < sorted.length; index++) {

@@ -152,6 +152,28 @@ export function parseTime(val: unknown): number | null {
   return null;
 }
 
+// Pickers write 12-hour times without AM/PM ("1:07" means 1:07 PM). The shift
+// runs from 6:00 AM to about 8 PM (Tony, 2026-09-25), and a picker's column is
+// in time order down the sheet, so each time is read in row order:
+//   • before 6:00        → PM (nobody starts before 6 AM)
+//   • 6:00–8:30          → PM once the day has reached noon, otherwise AM
+//   • 8:31–11:59, 12:00+ → as written
+// Mirrored in fixes/CPW_Picker_Export.gs (resolveTimeEntries_). Keep in sync.
+const SHIFT_START_MINS = 6 * 60;
+const LATEST_FINISH_MINS = 20 * 60 + 30;
+
+export function resolveShiftTimes(times: (number | null)[]): (number | null)[] {
+  let afternoon = false;
+  return times.map(t => {
+    if (t === null) return null;
+    let resolved = t;
+    if (t < SHIFT_START_MINS) resolved = t + 720;
+    else if (afternoon && t < 720 && t + 720 <= LATEST_FINISH_MINS) resolved = t + 720;
+    if (resolved >= 720) afternoon = true;
+    return resolved;
+  });
+}
+
 export function parseSheet(
   sheet: XLSX.WorkSheet,
   sheetName: string,
@@ -218,6 +240,8 @@ export function parseSheet(
       });
     }
     if (orders.length > 0) {
+      const resolved = resolveShiftTimes(orders.map(o => o.timeMinutes));
+      orders.forEach((o, i) => { o.timeMinutes = resolved[i]; });
       const normalName = normalizeName(name);
       result[`${normalName}|${dateStr}`] = { pickerName: normalName, dateStr, dateISO, orders };
     }
