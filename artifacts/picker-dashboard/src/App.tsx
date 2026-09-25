@@ -127,26 +127,6 @@ function weekLabel(ws: string): string {
   return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
-/**
- * Some sheets contain a secondary block of pick data below the main section
- * (e.g. a different shift or date overflow).  Those rows have timestamps in the
- * 1–2 AM range (< 150 min from midnight) while the main shift runs from 5 AM
- * onwards (≥ 150 min).  When both groups are present we drop the early-morning
- * cluster from TIMING analysis — it only creates false gaps.  Line counts from
- * those same rows are still included in totals because the lines are real.
- */
-function removePhantomTimes(times: number[]): number[] {
-  if (times.length <= 1) return times;
-  const PHANTOM_CUTOFF = 240; // 4:00 AM — before this is suspicious
-  const earlyTimes = times.filter(t => t < PHANTOM_CUTOFF);
-  const mainTimes  = times.filter(t => t >= PHANTOM_CUTOFF);
-  // Strip early-morning times only when a main-shift cluster also exists AND
-  // the early cluster is small (≤2 entries). A larger early cluster is more
-  // likely a cross-midnight night shift than a phantom secondary block.
-  if (earlyTimes.length > 0 && mainTimes.length > 0 && earlyTimes.length <= 2) return mainTimes;
-  return times;
-}
-
 // A day whose picking time (window minus look-for time) is under 30 minutes gets
 // no L/Hr or orders/hr: 8 lines in one minute is not a 480/hr picker (Tony,
 // 2026-09-25). Its lines and orders still count. Mirrored in the api-server.
@@ -179,7 +159,9 @@ function computeDayStats(data: PickerDayData): DayStats {
   // Sort numerically — NOT lexicographically — so "1:30" (90) never precedes
   // "12:30" (750) and gap spans are always computed in chronological order.
   const rawTimes = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
-  const times = removePhantomTimes(rawTimes).sort((a, b) => a - b);
+  // No early-morning "phantom" filter is needed: parseSheet's resolveShiftTimes
+  // already reads every time before 6 AM as PM.
+  const times = rawTimes.sort((a, b) => a - b);
 
   const lfOrders = orders.filter(o => o.isLookFor).length;
   const lfLines  = orders.filter(o => o.isLookFor).reduce((s, o) => s + o.linesPicked, 0);
@@ -285,21 +267,15 @@ function assignRatings(statsByDate: Map<string, DayStats[]>) {
 interface Batch { orderCount: number; lineCount: number; }
 
 function computeBatches(dayOrders: Order[]): Batch[] {
-  // Same phantom logic as removePhantomTimes: if any timestamp >= 240 exists,
-  // early-morning ones (< 240) are phantom and do NOT close a batch.
-  const allTimes = dayOrders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
-  const hasMain = allTimes.some(t => t >= 240);
-  const closesRun = (t: number | null) => t !== null && !(hasMain && t < 240);
-
   const batches: Batch[] = [];
   let cur: Order[] = [];
   for (const order of dayOrders) {
     cur.push(order);
-    if (closesRun(order.timeMinutes)) {
+    if (order.timeMinutes !== null) {
       batches.push({ orderCount: cur.length, lineCount: cur.reduce((s, o) => s + o.linesPicked, 0) });
       cur = [];
     }
-    // null or phantom timestamp → order stays in current accumulation
+    // null timestamp → order stays in current accumulation
   }
   // any remaining cur = incomplete run with no closing timestamp yet — ignore
   return batches;
@@ -499,8 +475,6 @@ function Dropdown({ value, onChange, options }: { value: string; onChange: (v: s
 }
 
 // ─── RAW ORDERS EXPAND PANEL ──────────────────────────────────────────────────
-const PHANTOM_CUTOFF_DISPLAY = 240;
-
 function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
   orders: Order[];
   gapFrom?: number;
@@ -508,7 +482,6 @@ function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
   colSpan: number;
 }) {
   const allTimes = orders.map(o => o.timeMinutes).filter((t): t is number => t !== null);
-  const hasMain = allTimes.some(t => t >= PHANTOM_CUTOFF_DISPLAY);
 
   const sorted = [...orders].sort((a, b) => {
     if (a.timeMinutes === null && b.timeMinutes === null) return 0;
@@ -562,19 +535,17 @@ function RawOrdersExpand({ orders, gapFrom, gapTo, colSpan }: {
                     );
                   }
                   const { order } = row;
-                  const isPhantom = order.timeMinutes !== null && hasMain && order.timeMinutes < PHANTOM_CUTOFF_DISPLAY;
                   const isBoundary = order.timeMinutes === gapFrom || order.timeMinutes === gapTo;
                   return (
                     <tr key={`ord-${i}`} style={{ background: isBoundary ? 'rgba(245,166,35,0.07)' : 'transparent' }}>
-                      <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? DIM : TEXT }}>{order.orderNumber}</td>
-                      <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? DIM : TEXT }}>{order.linesPicked}</td>
-                      <td style={{ ...td, ...mono, fontSize: 11, color: isPhantom ? '#7f4444' : isBoundary ? AMBER : order.timeMinutes !== null ? TEXT : DIM }}>
+                      <td style={{ ...td, ...mono, fontSize: 11, color: TEXT }}>{order.orderNumber}</td>
+                      <td style={{ ...td, ...mono, fontSize: 11, color: TEXT }}>{order.linesPicked}</td>
+                      <td style={{ ...td, ...mono, fontSize: 11, color: isBoundary ? AMBER : order.timeMinutes !== null ? TEXT : DIM }}>
                         {order.timeMinutes !== null ? fmtMin(order.timeMinutes) : '—'}
                       </td>
                       <td style={{ ...td, fontSize: 10, fontStyle: 'italic' }}>
                         {order.isLookFor
                           ? <span style={{ color: AMBER, fontWeight: 600, fontStyle: 'normal' }}>Look For</span>
-                          : isPhantom ? <span style={{ color: DIM }}>filtered — phantom timestamp</span>
                           : isBoundary && order.timeMinutes === gapFrom ? <span style={{ color: DIM }}>gap starts here</span>
                           : isBoundary && order.timeMinutes === gapTo ? <span style={{ color: DIM }}>gap ends here</span>
                           : ''}

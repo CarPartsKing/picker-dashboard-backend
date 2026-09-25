@@ -248,7 +248,11 @@ export function parseSheet(
       const resolved = resolveShiftTimes(orders.map(o => o.timeMinutes));
       orders.forEach((o, i) => { o.timeMinutes = resolved[i]; });
       const normalName = normalizeName(name);
-      result[`${normalName}|${dateStr}`] = { pickerName: normalName, dateStr, dateISO, orders };
+      const key = `${normalName}|${dateStr}`;
+      // Two columns with the same (normalized) name on one tab are one picker's
+      // day split across columns; combine them rather than keep only the last.
+      if (result[key]) result[key].orders.push(...orders);
+      else result[key] = { pickerName: normalName, dateStr, dateISO, orders };
     }
   }
   return result;

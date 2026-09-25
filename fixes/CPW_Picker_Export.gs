@@ -4,7 +4,7 @@ const EXPORT_TIME_ZONE = "America/New_York";
 const EXPORT_HOUR = 19;
 const UPLOAD_BATCH_SIZE = 100;
 const MAX_ERROR_DETAILS = 100;
-const SCRIPT_VERSION = "2026-09-25-v4";
+const SCRIPT_VERSION = "2026-09-25-v5";
 
 /**
  * Optional security:
@@ -598,18 +598,7 @@ function parseSheetWithErrors(data, dateLabel) {
       : null;
     const activeHours = effectiveMinutes !== null ? effectiveMinutes / 60 : null;
 
-    const gaps = [];
-    for (let index = 1; index < times.length; index++) {
-      const difference = times[index] - times[index - 1];
-      if (difference < 90) continue;
-      if (difference < 120 && lfCount > 0) continue;
-      gaps.push({
-        fromMins: times[index - 1],
-        toMins: times[index],
-        gapMins: difference,
-        severity: difference >= 180 ? "high" : difference >= 120 ? "medium" : "low"
-      });
-    }
+    const gaps = findGaps_(times, lfCount);
 
     records.push({
       date: dateLabel,
@@ -633,11 +622,32 @@ function parseSheetWithErrors(data, dateLabel) {
       rpLines: rpLines,
       soOrders: soCount,
       soLines: soLines,
-      orderDetail: []
+      orderDetail: [],
+      // Kept only so mergeDuplicateRecords_ can recompute gaps; stripped
+      // before upload.
+      _times: times
     });
   }
 
   return { records: records, sheetErrors: sheetErrors };
+}
+
+// Gaps of 90+ minutes between consecutive sorted times. With look-for orders
+// that day, a gap must be 120+ minutes, since look-fors fill short stretches.
+function findGaps_(times, lfCount) {
+  const gaps = [];
+  for (let index = 1; index < times.length; index++) {
+    const difference = times[index] - times[index - 1];
+    if (difference < 90) continue;
+    if (difference < 120 && lfCount > 0) continue;
+    gaps.push({
+      fromMins: times[index - 1],
+      toMins: times[index],
+      gapMins: difference,
+      severity: difference >= 180 ? "high" : difference >= 120 ? "medium" : "low"
+    });
+  }
+  return gaps;
 }
 
 function removeOutliers_(times) {
@@ -664,7 +674,11 @@ function mergeDuplicateRecords_(records) {
     current.rpLines += record.rpLines;
     current.soOrders += record.soOrders;
     current.soLines += record.soLines;
-    current.gaps = current.gaps.concat(record.gaps);
+    // Recompute gaps on the combined timeline; joining the two columns' gap
+    // lists produced overlapping gaps.
+    current._times = current._times.concat(record._times)
+      .sort(function (a, b) { return a - b; });
+    current.gaps = findGaps_(current._times, current.lfOrders);
     current.hasGaps = current.gaps.length > 0;
 
     if (record.firstTimeMins !== null) {
@@ -704,7 +718,11 @@ function mergeDuplicateRecords_(records) {
       : null;
   });
 
-  return Object.keys(merged).map(function (key) { return merged[key]; });
+  return Object.keys(merged).map(function (key) {
+    const record = merged[key];
+    delete record._times;
+    return record;
+  });
 }
 
 function parseSheet(data, dateLabel) {

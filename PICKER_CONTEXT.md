@@ -62,9 +62,10 @@ the higher priority wins:
 
 ### 2.2 Apps Script: `fixes/CPW_Picker_Export.gs`
 
-- **Version `2026-09-25-v4`** is the copy to use. It adds the shift-hours rule for 12-hour times (§3).
-  The Replit asset metadata still labels v3 "Use This Copy"; ignore that. **v4 only takes effect once
-  someone pastes it into the Sheet** (see below).
+- **Version `2026-09-25-v5`** is the copy to use. v4 added the shift-hours rule for 12-hour times (§3);
+  v5 recomputes gaps when one name has two columns on a day. The Replit asset metadata still labels v3
+  "Use This Copy"; ignore that. **A new version only takes effect once someone pastes it into the
+  Sheet** (see below). Tony pasted v4 on 2026-09-25.
   It runs daily at **7 PM Eastern** (`setupTriggers()`), reads **every dated tab**, merges duplicates,
   and uploads in batches of 100 with retries.
 - **Emails:**
@@ -147,8 +148,8 @@ the higher priority wins:
 
   The rule lives in two places that must stay in sync: `resolveTimeEntries_` in the Apps Script (the
   live feed) and `resolveShiftTimes` in `parseUtils.ts` (dragged-in .xlsx files). On 2026-09-25 both
-  copies agreed on 20,000 random sequences. The dashboard's older "phantom timestamp" filter, which
-  drops times before 4 AM, now has nothing to catch.
+  copies agreed on 20,000 random sequences. The dashboard's old "phantom timestamp" filter, which
+  dropped times before 4 AM, was removed as dead code on 2026-09-25.
 - **Gap flags:** a gap of 90 minutes or more is flagged. Low under 120, Med 120–179, High 180+.
   Times are sorted as numbers before gaps are found, everywhere.
 - **Picking totals leave out** LF, RP and SO orders. Those are counted separately.
@@ -200,12 +201,23 @@ the higher priority wins:
   - **Old rows keep the wrong times.** 1,754 of the 2,424 rows come from exports on May 3, Jun 30 and
     Jul 23. Their sheet tabs are no longer exported, so v4 can't reach them. Only the raw sheet tabs
     could fix them.
-- **Duplicate columns merge their gaps badly.** When one name has two columns on the same day, both the
-  Apps Script (`mergeDuplicateRecords_`) and Render (`_dedup`) join the two gap lists instead of
-  recomputing gaps on the combined times, which produces overlapping gaps (Anthony, Jul 20–23). Before
-  August this may have been two different Anthonys writing plain "Anthony". Not fixed.
-- **Some pickers never get an L/Hr** because their time format fails to parse (Brandon, Bryan in past
-  data). **Sherri's** active windows are tiny, so her L/Hr is inflated above 100.
+- **Two columns with the same name on one tab** (fixed 2026-09-25):
+  - The Apps Script used to join the two columns' gap lists, which produced overlapping gaps (Anthony,
+    Jul 20–23). v5 keeps each column's times (`_times`, stripped before upload) and recomputes gaps on
+    the combined timeline.
+  - The dashboard's xlsx parser used to keep only the last column, silently dropping the other's
+    orders. It now combines them.
+  - Render's `_dedup` still joins gap lists, but it only sees duplicates the Apps Script has already
+    merged, so it no longer matters.
+  - Before August, the two columns may have been two different Anthonys both writing "Anthony".
+- **Days with no usable timing:** 131 across the full history.
+  - Every value in the pre-v3 warnings email (`attached_assets/Pasted--tonydifiore…txt`) parses in v4
+    except one garbled `\11553`.
+  - The 24 such days in the 2026-09-25 export are columns with no times, or only one (Belle Sep 20,
+    82 orders; Larone Aug 9, 58 orders). The v4/v5 warnings email names the cells; it's needed to fix
+    them.
+  - Brandon's and Nani's days are all in old frozen exports.
+  - **Sherri's** tiny windows come from the old AM/PM misreads.
 - **`is_lf_specialist` has two sources.** Render calculates it, and the Replit archive copies whatever
   Render sent. Don't add a third rule.
 - **The archive runs only when the dashboard is opened.** Now that the cap looks like a read limit,
@@ -255,5 +267,11 @@ Anthonyd; Tayja and Taylor; Tyler and Tyler B; David and Davion.
   - in `artifacts/picker-dashboard` and `artifacts/api-server`: `../../node_modules/.bin/tsc -p tsconfig.json --noEmit`
 
   All three passed on 2026-09-24.
+- **Tests:** `node --test src/*.test.ts` in `artifacts/picker-dashboard`, or `pnpm --filter
+  @workspace/picker-dashboard run test`. They cover parseTime, the shift rule, name rules, tab dates and
+  parseSheet, using Node's built-in runner, so nothing extra to install. Add a test with every parser
+  change.
+- `vite build` can't run on the T14s: the Rollup Windows binary isn't installed, because the packages
+  were installed for Replit's Linux. Rely on typecheck and tests locally; Replit builds on publish.
 - Check the live feed quickly by opening `https://picker-dashboard-backend.onrender.com/api/picker-data`.
   Render's free tier may take a minute to wake up.
