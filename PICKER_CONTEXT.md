@@ -151,8 +151,14 @@ the higher priority wins:
   - A zero next to letters becomes O (`0ssie` becomes `Ossie`).
   - Number-only words are dropped (`Eric 356025562` becomes `Eric`).
   - Then `PICKER_NAME_ALIASES` is applied.
-  - **Only add an alias after checking that the two names never appear on the same date.** Two names on
-    one day means two people.
+  - **Before adding an alias, check every date the two names share:**
+    - **Figures differ** (different times or order counts): two columns, so two people. Don't merge.
+    - **Figures identical:** the same column was exported under two spellings because its header was
+      retyped between exports, and Supabase kept both rows. Safe to merge.
+    - **No shared dates:** usually safe; ask Tony.
+  - After name rules, the dashboard and the archive keep **one row per picker per day**: the most
+    recently exported one (`latestPerPickerDay` in `App.tsx`, and the archive dedupe in
+    `dashboard.ts`). Before this, Ossie on 2026-05-06 and Andy on 2026-05-01 were counted twice.
 
 ---
 
@@ -208,18 +214,23 @@ the higher priority wins:
 
 ## 5. Open decisions (Tony)
 
-**Name merges not yet decided.** Checked against the live feed on 2026-09-24:
+**Merged:** 0ssie → Ossie, Andy! → Andy, Eric + number → Eric, Jreremy → Jeremy, Jaypitt → Jay Pitt,
+Anthony a → Anthonya (2026-09-24); Nas → Nasir, Ken → Kenneth, Taureen → Taurean, Armanip → Armani,
+Phil → Phillip (2026-09-25).
 
-| Variants | Question |
-|---|---|
-| Ahthony | Appears on the same day as Anthony (Jul 16), so it may be Anthony A or Anthony D |
-| Jay, Jay M, Jayy, Jy | One person or several? (Jaypitt/Jay pitt already merged as Jay Pitt) |
-| Nas → Nasir, Ken → Kenneth | No same-day overlap |
-| Tay | Taylor or Tayja? |
-| Will/William, Taurean/Taureen | Older than the current feed. Which spelling is right? |
+**Name merges not yet decided.** Checked against the full feed, 2,424 rows from Apr 1, on 2026-09-25:
 
-**Confirmed as different people** (they work on the same dates): Anthony, Anthonya and Anthonyd;
-Tayja and Taylor.
+| Variants | Evidence | Question |
+|---|---|---|
+| Ahthony | Differs from Anthony on Jul 16 (different orders) | Anthony A, Anthony D, or its own person? |
+| Jay, Jay M, Jayy, Jy | No shared days | One person or several? |
+| Tay (2 days) | No shared days with Taylor or Tayja | Which one? |
+| Will/William, Kal/Kalel, Reggie/Reginald, Carlos/Carlos J, Tony/Tonya, Jorge/"Jorge W.call" | No shared days | Same person? |
+| Sherri (Apr–May 13), Shari (Jun 3–Jul 3) | Never overlap; one ends as the other starts | Same person, name spelled two ways? |
+| Bryan/Bryant | Differ on May 26 (29 vs 4 orders) | Probably two people |
+
+**Confirmed as different people** (different figures on shared dates): Anthony, Anthonya and
+Anthonyd; Tayja and Taylor; Tyler and Tyler B; David and Davion.
 
 **Also open:**
 - whether RP/SO time should be subtracted like LF

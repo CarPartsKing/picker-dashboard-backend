@@ -147,6 +147,20 @@ function removePhantomTimes(times: number[]): number[] {
   return times;
 }
 
+// A sheet column whose header was retyped between exports ("0ssie" then
+// "Ossie") leaves both rows in Supabase with identical figures. After name rules
+// they share a picker+date, so keep only the most recently exported one.
+// Mirrors the archive dedupe in api-server/src/routes/dashboard.ts.
+function latestPerPickerDay(records: LivePickerRecord[]): LivePickerRecord[] {
+  const byKey = new Map<string, LivePickerRecord>();
+  for (const r of records) {
+    const key = `${normalizeName(r.picker)}|${r.date}`;
+    const prev = byKey.get(key);
+    if (!prev || r.exported_at > prev.exported_at) byKey.set(key, r);
+  }
+  return [...byKey.values()];
+}
+
 function computeDayStats(data: PickerDayData): DayStats {
   const { pickerName, dateStr, date, orders } = data;
   const pickingOrders = orders.filter(o => !o.isLookFor && !o.isRP && !o.isSO);
@@ -3020,7 +3034,7 @@ export default function App() {
     setLiveError(null);
     try {
       const resp = await fetchLivePickerData();
-      setLiveStats(resp.data.map(liveRecordToDayStats));
+      setLiveStats(latestPerPickerDay(resp.data).map(liveRecordToDayStats));
       setLiveLastUpdated(resp.exportedAt);
     } catch (err: unknown) {
       setLiveError(err instanceof Error ? err.message : String(err));

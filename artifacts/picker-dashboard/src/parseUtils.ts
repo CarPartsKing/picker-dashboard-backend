@@ -30,6 +30,11 @@ export const PICKER_NAME_ALIASES: Record<string, string> = {
   'Jreremy': 'Jeremy',
   'Jaypitt': 'Jay Pitt',
   'Anthony A': 'Anthonya',
+  'Nas': 'Nasir',
+  'Ken': 'Kenneth',
+  'Taureen': 'Taurean',
+  'Armanip': 'Armani',
+  'Phil': 'Phillip',
 };
 
 // Normalise a picker name so casing and typing variants (ANTHONY / anthony,

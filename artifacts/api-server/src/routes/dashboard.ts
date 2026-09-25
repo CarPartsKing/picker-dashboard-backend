@@ -220,6 +220,7 @@ const LiveRecordSchema = z.object({
   rp_lines: z.number().nullish(),
   so_orders: z.number().nullish(),
   so_lines: z.number().nullish(),
+  exported_at: z.string().nullish(),
 });
 
 const LiveResponseSchema = z.object({
@@ -233,6 +234,11 @@ const PICKER_NAME_ALIASES: Record<string, string> = {
   Jreremy: "Jeremy",
   Jaypitt: "Jay Pitt",
   "Anthony A": "Anthonya",
+  Nas: "Nasir",
+  Ken: "Kenneth",
+  Taureen: "Taurean",
+  Armanip: "Armani",
+  Phil: "Phillip",
 };
 
 function normalizeName(raw: string): string {
@@ -263,11 +269,16 @@ async function archiveLiveData(body: unknown, log: RequestLogger): Promise<void>
     return;
   }
 
-  // Dedupe on normalized picker|date (feed may contain raw-name variants).
+  // Dedupe on normalized picker|date. A column whose header was retyped between
+  // exports ("0ssie" then "Ossie") leaves both rows in Supabase with identical
+  // figures, so keep the most recently exported one. Mirrors latestPerPickerDay
+  // in the dashboard's App.tsx.
   const byKey = new Map<string, (typeof parsed.data.data)[number]>();
   for (const r of parsed.data.data) {
     if (!r.date || !r.picker) continue;
-    byKey.set(`${normalizeName(r.picker)}|${r.date}`, r);
+    const key = `${normalizeName(r.picker)}|${r.date}`;
+    const prev = byKey.get(key);
+    if (!prev || (r.exported_at ?? "") > (prev.exported_at ?? "")) byKey.set(key, r);
   }
 
   const rows = [...byKey.values()].map((r) => {
