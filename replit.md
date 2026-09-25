@@ -41,7 +41,7 @@ XLSX-upload warehouse picker analytics dashboard. Frontend-only React+Vite app w
 - On mount: loads all saved stats from API and merges with any locally parsed data (local takes precedence for same picker+date)
 - Color theme: `BG=#060D1F` (navy), `BRAND=#E8192C` (red), `AMBER=#38BDF8` (sky blue for data values)
 
-**Upload password**: stored in env var `DASHBOARD_UPLOAD_PASSWORD` (default: `picktrack2025`). Change it in the Secrets tab.
+**Upload password**: stored in the Replit Secret `DASHBOARD_UPLOAD_PASSWORD`; there is no default, and upload and clear-all return 500 until it is set. Never write its value into this repo — the repo is public.
 
 **API routes** (on the shared api-server at `/api`):
 - `GET /api/dashboard/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — public, returns all stored picker-day stats
