@@ -152,9 +152,14 @@ the higher priority wins:
   - The Apps Script upserts and never deletes, so older days are probably still in Supabase. They just
     don't come back in the GET.
   - The Replit agent read this as "older days fall off" and built the archive to cope.
-  - **Fix, if confirmed:** page the Render GET (the `Range` header or `limit`/`offset`), or add
-    `from`/`to` filters.
-  - The same limit could affect `_update_lf_specialist` for a picker with more than 1,000 rows.
+  - **Fixed 2026-09-24 in `backend_server.py`.** `_select_all` pages with `limit`/`offset` until it
+    gets an empty page. `GET /api/picker-data` and the LF specialist recalculation both use it.
+    Picker names in the LF in-list are now quoted, because a comma in a raw sheet name used to break
+    the query.
+  - Tested against a fake Supabase with a 1,000-row cap and a 400-row cap. The old code returned
+    exactly 1,000 rows; the new code returns all of them.
+  - **After Render deploys**, `recordCount` above 1,000 on the live feed confirms that older days were
+    in Supabase all along.
 - **Gap detection on Render** sorts raw time strings instead of parsed minutes. About 33 records have
   gaps that start at the first time of the day.
 - **Some pickers never get an L/Hr** because their time format fails to parse (Brandon, Bryan in past
@@ -190,7 +195,6 @@ Tayja and Taylor.
 
 **Also open:**
 - whether RP/SO time should be subtracted like LF
-- whether to page the Render GET (§4)
 
 ---
 

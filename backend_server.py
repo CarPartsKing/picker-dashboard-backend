@@ -22,6 +22,10 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 TABLE = os.environ.get("SUPABASE_TABLE", "picker_data")
 API_KEY = os.environ.get("API_KEY", "")
 
+# Supabase returns at most this many rows per request (its default max-rows),
+# so every read pages until an empty page comes back.
+PAGE_SIZE = 1000
+
 
 def _supabase_headers() -> dict[str, str]:
     return {
@@ -73,6 +77,28 @@ class ExportPayload(BaseModel):
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+async def _select_all(client: httpx.AsyncClient, params: dict[str, str]) -> list[dict]:
+    """GET every matching row, paging past Supabase's per-request row cap.
+
+    `params` must include an `order` that is unique per row (date,picker is the
+    table's conflict key) so pages don't overlap or skip rows. Stops on an empty
+    page rather than a short one, in case the server's max-rows is below PAGE_SIZE.
+    """
+    rows: list[dict] = []
+    while True:
+        res = await client.get(
+            f"{SUPABASE_URL}/rest/v1/{TABLE}",
+            headers=_supabase_headers(),
+            params={**params, "limit": str(PAGE_SIZE), "offset": str(len(rows))},
+        )
+        if res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Supabase error {res.status_code}: {res.text}")
+        page = res.json()
+        if not page:
+            return rows
+        rows.extend(page)
+
 
 def _to_row(r: PickerRecord, exported_at: str) -> dict[str, Any]:
     """Map camelCase PickerRecord fields to snake_case Supabase columns."""
@@ -155,20 +181,20 @@ async def _update_lf_specialist(client: httpx.AsyncClient, pickers: list[str]) -
     if not pickers or not SUPABASE_URL:
         return
 
-    picker_filter = "(" + ",".join(pickers) + ")"
-    res = await client.get(
-        f"{SUPABASE_URL}/rest/v1/{TABLE}",
-        headers=_supabase_headers(),
-        params={
-            "picker": f"in.{picker_filter}",
+    # Quote each name so commas, periods or parentheses in a raw sheet name
+    # can't break PostgREST's in-list syntax.
+    quoted = ",".join('"' + p.replace("\\", "\\\\").replace('"', '\\"') + '"' for p in pickers)
+    try:
+        all_rows = await _select_all(client, {
+            "picker": f"in.({quoted})",
             "select": "picker,lf_orders,lf_pct_of_shift",
-        },
-    )
-    if res.status_code != 200:
+            "order": "date.asc,picker.asc",
+        })
+    except HTTPException:
         return  # best-effort; don't fail the upsert
 
     by_picker: dict[str, list[dict]] = defaultdict(list)
-    for row in res.json():
+    for row in all_rows:
         by_picker[row["picker"]].append(row)
 
     for picker, rows in by_picker.items():
@@ -235,16 +261,8 @@ async def get_picker_data() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="Supabase not configured")
 
     async with httpx.AsyncClient(timeout=15) as client:
-        res = await client.get(
-            f"{SUPABASE_URL}/rest/v1/{TABLE}",
-            headers=_supabase_headers(),
-            params={"order": "date.desc,picker.asc"},
-        )
+        rows = await _select_all(client, {"order": "date.desc,picker.asc"})
 
-    if res.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Supabase error {res.status_code}: {res.text}")
-
-    rows: list[dict] = res.json()
     exported_at = rows[0]["exported_at"] if rows else datetime.now(timezone.utc).isoformat()
 
     return {
