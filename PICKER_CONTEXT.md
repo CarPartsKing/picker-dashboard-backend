@@ -234,7 +234,7 @@ Phil → Phillip (2026-09-25).
 | Jay, Jay M, Jayy, Jy | No shared days | One person or several? |
 | Tay (2 days) | No shared days with Taylor or Tayja | Which one? |
 | Will/William, Kal/Kalel, Reggie/Reginald, Carlos/Carlos J, Tony/Tonya, Jorge/"Jorge W.call" | No shared days | Same person? |
-| Sherri (Apr–May 13), Shari (Jun 3–Jul 3) | Never overlap; one ends as the other starts | Same person, name spelled two ways? |
+| Sherri (Apr 5–May 13), Shari (Jun 3–Jul 3) | **Kept separate (Tony, 2026-09-25).** For one person: the names never overlap, and they are the only two of 52 pickers who usually start 6:10–6:25 with 50–70 orders a day. Against: a 3-week gap between them, Sherri works Sundays while Shari works Saturdays, and lines per order are 1.36 vs 1.59. Sherri's ~7 AM finish is an old AM/PM mistake, so don't use it as evidence | Revisit only if Tony confirms it's one person |
 | Bryan/Bryant | Differ on May 26 (29 vs 4 orders) | Probably two people |
 
 **Confirmed as different people** (different figures on shared dates): Anthony, Anthonya and
